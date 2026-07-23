@@ -3,10 +3,12 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from typing import cast
+from uuid import UUID
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.openapi.docs import (
     get_redoc_html,
     get_swagger_ui_html,
@@ -14,11 +16,19 @@ from fastapi.openapi.docs import (
 )
 from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from brand_maker.config import Settings
-from brand_maker.models import BrandRequest, BrandResponse
+from brand_maker.models import (
+    BrandRequest,
+    BrandResponse,
+    SavedBrand,
+    SavedBrandGeneration,
+    SavedBrandPage,
+)
 from brand_maker.openrouter import OpenRouterClient
 from brand_maker.pipeline import BrandBuilder, BrandPipeline
+from brand_maker.storage import SQLiteBrandRepository
 from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 
@@ -26,7 +36,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(
-    *, settings: Settings | None = None, pipeline: BrandBuilder | None = None
+    *,
+    settings: Settings | None = None,
+    pipeline: BrandBuilder | None = None,
+    repository: SQLiteBrandRepository | None = None,
 ) -> FastAPI:
     """Create an application whose resources are owned by its lifespan."""
 
@@ -38,6 +51,9 @@ def create_app(
             logger.critical("OPENROUTER_API_KEY is required; server startup aborted.")
             raise
         app.state.settings = resolved_settings
+        app.state.repository = repository or SQLiteBrandRepository(
+            resolved_settings.database_path
+        )
 
         if pipeline is not None:
             app.state.pipeline = pipeline
@@ -124,5 +140,52 @@ def create_app(
     async def build_brand(payload: BrandRequest, request: Request) -> BrandResponse:
         builder = cast(BrandBuilder, request.app.state.pipeline)
         return await builder.build(payload.brand_name)
+
+    @app.post("/api/brands", response_model=SavedBrandGeneration, tags=["brand library"])
+    async def create_saved_brand(
+        payload: BrandRequest, request: Request
+    ) -> SavedBrandGeneration:
+        builder = cast(BrandBuilder, request.app.state.pipeline)
+        result = await builder.build(payload.brand_name)
+        if result.status != "ok":
+            return SavedBrandGeneration(status=result.status, message=result.message)
+
+        if result.kit is None:  # Defensive narrowing; BrandResponse already enforces this.
+            raise RuntimeError("successful generation did not contain a kit")
+        store = cast(SQLiteBrandRepository, request.app.state.repository)
+        saved = await run_in_threadpool(store.save, result.kit)
+        return SavedBrandGeneration(
+            status="ok",
+            id=saved.id,
+            created_at=saved.created_at,
+            kit=saved.kit,
+        )
+
+    @app.get("/api/brands", response_model=SavedBrandPage, tags=["brand library"])
+    async def list_saved_brands(
+        request: Request,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(12, alias="pageSize", ge=1, le=100),
+    ) -> SavedBrandPage:
+        store = cast(SQLiteBrandRepository, request.app.state.repository)
+        items, total = await run_in_threadpool(
+            partial(store.list, page=page, page_size=page_size)
+        )
+        total_pages = (total + page_size - 1) // page_size
+        return SavedBrandPage(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total_items=total,
+            total_pages=total_pages,
+        )
+
+    @app.get("/api/brands/{brand_id}", response_model=SavedBrand, tags=["brand library"])
+    async def get_saved_brand(brand_id: UUID, request: Request) -> SavedBrand:
+        store = cast(SQLiteBrandRepository, request.app.state.repository)
+        saved = await run_in_threadpool(store.get, brand_id)
+        if saved is None:
+            raise HTTPException(status_code=404, detail="Brand not found.")
+        return saved
 
     return app

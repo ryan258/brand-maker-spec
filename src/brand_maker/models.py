@@ -105,3 +105,23 @@ class SavedBrandPage(ContractModel):
     page_size: int = Field(..., ge=1, le=100)
     total_items: int = Field(..., ge=0)
     total_pages: int = Field(..., ge=0)
+
+
+class SavedBrandGeneration(ContractModel):
+    """Generation outcome whose successful variant points to a saved resource."""
+
+    status: Literal["ok", "refused", "error"]
+    id: UUID | None = None
+    created_at: datetime | None = None
+    kit: BrandKit | None = None
+    message: str | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> Self:
+        saved_fields = (self.id, self.created_at, self.kit)
+        if self.status == "ok" and (any(value is None for value in saved_fields) or self.message):
+            raise ValueError("ok generations require a saved brand and no message")
+        has_saved_fields = any(value is not None for value in saved_fields)
+        if self.status != "ok" and (has_saved_fields or not self.message):
+            raise ValueError("non-ok generations require only a message")
+        return self

@@ -1,5 +1,7 @@
 """Environment-backed service configuration."""
 
+from pathlib import Path
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,4 +42,9 @@ class Settings(BaseSettings):
         gt=0,
         le=120,
         validation_alias="BRAND_MAKER_REQUEST_TIMEOUT_SECONDS",
+    )
+    database_path: Path = Field(
+        Path(".brand-maker/brands.db"),
+        validation_alias="BRAND_MAKER_DATABASE_PATH",
+        description="Local SQLite file containing immutable generated brand kits.",
     )
