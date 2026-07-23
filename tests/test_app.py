@@ -19,6 +19,21 @@ class FakePipeline:
         return self.response
 
 
+def test_root_describes_available_api_routes() -> None:
+    settings = Settings(_env_file=None, openrouter_api_key="test-key")
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "service": "Brand System Maker",
+        "docs": "/docs",
+        "health": "/health",
+        "generate": "POST /brand",
+    }
+
+
 def test_health_reports_up_when_configuration_is_valid() -> None:
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
 

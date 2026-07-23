@@ -57,6 +57,15 @@ def create_app(
         lifespan=lifespan,
     )
 
+    @app.get("/", tags=["operations"])
+    async def root() -> dict[str, str]:
+        return {
+            "service": "Brand System Maker",
+            "docs": "/docs",
+            "health": "/health",
+            "generate": "POST /brand",
+        }
+
     @app.get("/health", tags=["operations"])
     async def health() -> dict[str, str]:
         return {"status": "up"}

@@ -27,6 +27,8 @@ curl -X POST http://127.0.0.1:8000/brand \
   -d '{"brand_name":"Floogle"}'
 ```
 
+Opening `http://127.0.0.1:8000/` shows a small API directory. It is not a
+graphical front end—the v1 specification intentionally defines an API-only app.
 Interactive OpenAPI documentation is available at
 `http://127.0.0.1:8000/docs` while the server is running.
 
