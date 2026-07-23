@@ -1,8 +1,13 @@
-# Brand System Maker Pipeline - Build-Ready AI Specification
+# Legacy Parody Brand Kit Pipeline - Compatibility Specification
 
-> **Status:** Zero-Guessing Build Ready
-> **Build target:** Single-brand, synchronous FastAPI service
+> **Status:** Shipped compatibility contract
+> **Build target:** Legacy single-brand endpoint within the local Brand System Maker
 > **Owner note (Ryan):** Input is a brand name only. The model invents everything else.
+
+This document governs the retained parody-kit flow (`POST /brand` and
+`/api/brands`). It is not the product-wide specification. The current local-first
+living brand workspace, publication, export, and compliance contract is defined in
+[`docs/specs/living-brand-system.md`](docs/specs/living-brand-system.md).
 
 ---
 
@@ -22,7 +27,8 @@
 - **Validation:** Pydantic v2
 - **HTTP client:** `httpx` (async) for OpenRouter calls
 - **Config:** `pydantic-settings` reading from a `.env` file
-- **Runtime shape:** Single synchronous endpoint. One brand in, one brand kit out. No batching, no queue, no database.
+- **Runtime shape:** One synchronous compatibility endpoint. One name in, one kit
+  out. The broader application also has additive SQLite-backed living-brand flows.
 
 ### Model Target & Parameters
 - **Provider:** OpenRouter (`https://openrouter.ai/api/v1/chat/completions`)
@@ -33,11 +39,12 @@
 - **Auth:** `OPENROUTER_API_KEY` from environment. Never hardcode.
 - **Response format:** Request JSON output. Parse and validate against the Output Schema Contract.
 
-### Data Source & Ingestion
+### Legacy Data Source & Ingestion
 - **Source:** None stored. Each brand is typed fresh by the user at call time.
 - **Ingestion mechanism:** HTTP `POST /brand` with a JSON body.
 - **Body shape:** `{ "brand_name": "<string>" }`
-- **No file paths. No database reads. No batch files.**
+- The stateless `POST /brand` path performs no file or database reads. The retained
+  library endpoint may save successful kits to local SQLite.
 
 ---
 
@@ -230,12 +237,14 @@ Build the thinnest wireable slice first. Get one real brand kit end to end befor
 
 ---
 
-## Out of Scope (Do Not Build in v1)
+## Out of Scope for the Legacy Parody Endpoint
 
 - **Batching.** No multi-brand lists. One brand per call only.
-- **Persistence.** No database, no saved history, no file storage.
+- **Living-brand persistence.** The legacy endpoint does not create or mutate a
+  living brand workspace; those workflows are governed by the current spec.
 - **Parody target override.** No `parody_target` input field yet. The model invents it. (Planned for v2.)
-- **User interface.** No front end. API only.
+- **Living-brand UI behavior.** The legacy endpoint contract does not govern the
+  browser workshop, publication views, exports, or compliance workflow.
 - **Auth for the API itself.** No login. Assume trusted local or internal use for v1.
 - **Async job queue.** All calls are synchronous.
 

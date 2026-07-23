@@ -1,13 +1,18 @@
 # Brand System Maker
 
-A local-first FastAPI application that turns one parody brand name into a complete,
-validated brand kit through OpenRouter. Successful kits are saved to a local SQLite
-library. The generation pipeline implements the product contract in `spec.md`,
-including bounded schema retries, one refusal rephrase, and one model failover.
+A local-first FastAPI workshop for building comprehensive, versioned living brand
+systems. It supports structured editing, resumable section generation, approval and
+immutable publication, audience guides, portable exports, and evidence-rich brand
+compliance. The original parody-kit generator remains available as a compatible
+starting point and can be migrated into a living workspace.
 
 ## Quick start
 
 Requirements: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+
+Tagged PDF export uses WeasyPrint. On macOS, install its native runtime with
+`brew install weasyprint`; follow the WeasyPrint installation guide for equivalent
+Linux packages.
 
 ```bash
 uv sync --extra dev
@@ -27,12 +32,21 @@ curl -X POST http://127.0.0.1:8000/brand \
   -d '{"brand_name":"Floogle"}'
 ```
 
-Opening `http://127.0.0.1:8000/` shows the browser workspace: enter a parody name,
-generate a kit, and review or copy the identity, voice, personality, and palette.
-Every successful generation is saved locally. Open `http://127.0.0.1:8000/brands`
-to browse the collection; each card links to its complete brand page. The homepage
-also includes a plain-language first-run guide. Interactive OpenAPI documentation is
-available at `http://127.0.0.1:8000/docs`.
+Open `http://127.0.0.1:8000/brand-systems` to create and edit a living brand, or
+`http://127.0.0.1:8000/compliance` to check an artifact. The legacy generator is at
+the homepage and its saved library is at `/brands`. Interactive API documentation is
+available at `/docs`.
+
+The living-brand workflow is:
+
+1. Create a blank workspace or migrate a saved parody kit.
+2. Edit sections manually or generate a complete/selected starting point.
+3. Review dependencies, lock settled sections, approve an exact draft revision,
+   and publish an immutable semantic version.
+4. Render creator, designer, business, or agency views; export Markdown, developer
+   tokens/rules, canonical archives, or tagged PDF/UA.
+5. Register artifact revisions and run deterministic compliance checks. Unsupported
+   checks, model judgment, evidence, and expiring exceptions remain visibly distinct.
 
 The original `POST /brand` endpoint remains stateless and backward-compatible. The
 browser uses the persistent library API:
@@ -63,8 +77,14 @@ service does not expose provider payloads, credentials, or partial model output.
 | `BRAND_MAKER_REQUEST_TIMEOUT_SECONDS` | No | `45` |
 | `BRAND_MAKER_DATABASE_PATH` | No | `.brand-maker/brands.db` |
 
-The database is created on the first library operation and is excluded from Git.
-Back up the configured database file if the generated collection matters to you.
+The database and managed-asset directory are created on first use and excluded from
+Git. Back up both the configured database file and its sibling `assets/` directory.
+To restore on another machine, stop the app, replace those two items from the same
+backup generation, and restart. Canonical publication archives are independently
+checksum-bound and can restore their managed assets without original source paths.
+
+Legacy records are never destructively migrated. Creating a living workspace from a
+saved kit copies its content and provenance; the source kit remains unchanged.
 
 The spec's original `anthropic/claude-3.5-sonnet` fallback is retired. The shipped
 default is the currently available Sonnet 4.5 slug; every model remains overridable
@@ -97,7 +117,11 @@ and `2` for invalid input or evaluation failure.
 
 ## Architecture
 
-- `models.py`: strict public data contracts.
+- `brand_system/`: canonical workspaces, validation, assets, publication, and amendments.
+- `generation/`: versioned section prompts and resumable generation runs.
+- `publishing/`: audience projections, Markdown/developer/archive/PDF exports.
+- `compliance/`: artifact revisions, deterministic checks, campaigns, evidence, and exceptions.
+- `models.py`: retained parody-kit public contracts.
 - `openrouter.py`: bounded HTTP adapter and provider-envelope validation.
 - `json_extract.py`: defensive extraction of object-shaped model output.
 - `pipeline.py`: retry, refusal, failover, and terminal-outcome state machine.
@@ -108,6 +132,8 @@ and `2` for invalid input or evaluation failure.
 - `library_web.py`: collection and full-detail HTML shells.
 - `library_ui.py`: safe collection/detail loading and rendering behavior.
 - `library_styles.py`: shared responsive library design system.
+- `workshop_web.py` / `workshop_ui.py` / `workshop_styles.py`: living-brand workspace HTML shells, dependency-free behavior, and styles.
+- `compliance_web.py` / `compliance_ui.py`: local compliance workflow shell and text-only DOM behavior.
 - `evaluation.py`: deterministic checks and the exact LLM judge rubric.
 
 Framework patterns follow the official documentation for
