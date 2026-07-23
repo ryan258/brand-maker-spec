@@ -34,10 +34,14 @@ def test_brand_request_accepts_name_at_contract_boundaries() -> None:
     assert len(BrandRequest(brand_name="F" * 80).brand_name) == 80
 
 
-@pytest.mark.parametrize("brand_name", ["", "F" * 81])
+@pytest.mark.parametrize("brand_name", ["", "   ", "F" * 81])
 def test_brand_request_rejects_name_outside_contract(brand_name: str) -> None:
     with pytest.raises(ValidationError):
         BrandRequest(brand_name=brand_name)
+
+
+def test_brand_request_strips_surrounding_whitespace() -> None:
+    assert BrandRequest(brand_name="  Floogle  ").brand_name == "Floogle"
 
 
 def test_brand_kit_accepts_complete_contract() -> None:
@@ -45,6 +49,26 @@ def test_brand_kit_accepts_complete_contract() -> None:
 
     assert kit.color_palette.primary == "#4285F4"
     assert len(kit.personality) == 3
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["brand_name", "parody_target", "tagline", "description", "brand_voice"],
+)
+def test_brand_kit_rejects_whitespace_only_required_text(field: str) -> None:
+    data = valid_kit_data()
+    data[field] = "   "
+
+    with pytest.raises(ValidationError):
+        BrandKit.model_validate(data)
+
+
+def test_brand_kit_rejects_whitespace_only_personality_items() -> None:
+    data = valid_kit_data()
+    data["personality"] = ["Playful", "   ", "Helpful"]
+
+    with pytest.raises(ValidationError):
+        BrandKit.model_validate(data)
 
 
 @pytest.mark.parametrize("color", ["4285F4", "#fff", "#GGGGGG", "#1234567"])

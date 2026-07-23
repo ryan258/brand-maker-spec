@@ -168,10 +168,8 @@ class OpenRouterClient:
             raise ModelUnavailable("model provider unavailable")
         if error_type == "context_length_exceeded" or "context length" in message:
             raise ContextOverflow("input too large")
-        if (
-            error_type in {"refusal", "content_policy_violation"}
-            or http_status == "403"
-            or error_code == "403"
-        ):
+        # ponytail: 403 also means permission_denied (bad API-key perms), which is a
+        # config error, not a content refusal — only explicit policy types refuse.
+        if error_type in {"refusal", "content_policy_violation"}:
             raise ProviderRefusal("model declined the request")
         raise ProviderError("model provider request failed")

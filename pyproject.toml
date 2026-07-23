@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "brand-system-maker"
 version = "0.1.0"
-description = "A stateless FastAPI service that creates validated parody brand kits."
+description = "A local-first workshop for creating, publishing, exporting, and checking living brand systems."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
   "uvicorn[standard]>=0.35,<1",
+  "weasyprint>=69,<70",
 ]
 
 [project.optional-dependencies]
@@ -47,3 +48,9 @@ select = ["E", "F", "I", "B", "UP", "RUF"]
 python_version = "3.11"
 strict = true
 packages = ["brand_maker"]
+
+[dependency-groups]
+dev = [
+    "pdfplumber>=0.11,<1",
+    "pypdf>=5,<6",
+]

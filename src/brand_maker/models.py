@@ -1,7 +1,7 @@
 """Public request and response contracts for the service."""
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,7 +12,7 @@ HEX = r"^#(?:[0-9a-fA-F]{6})$"
 class ContractModel(BaseModel):
     """Strict base model used at all public boundaries."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class BrandRequest(ContractModel):
@@ -45,7 +45,7 @@ class BrandKit(ContractModel):
     tagline: str = Field(..., min_length=1, max_length=120)
     description: str = Field(..., min_length=1, max_length=500)
     brand_voice: str = Field(..., min_length=1, max_length=400)
-    personality: list[str] = Field(
+    personality: list[Annotated[str, Field(min_length=1)]] = Field(
         ..., min_length=3, max_length=6, description="3 to 6 trait words."
     )
     color_palette: ColorPalette

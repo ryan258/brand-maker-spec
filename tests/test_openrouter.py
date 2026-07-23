@@ -165,7 +165,9 @@ async def test_generate_classifies_provider_refusal() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_preserves_http_status_when_embedded_code_differs() -> None:
+async def test_generate_treats_bare_403_as_provider_error_not_refusal() -> None:
+    # 403 without an explicit refusal/content-policy type is a permission/config
+    # error (e.g. bad API-key perms), not a model content refusal.
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             403,
@@ -178,10 +180,12 @@ async def test_generate_preserves_http_status_when_embedded_code_differs() -> No
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        with pytest.raises(ProviderRefusal):
+        with pytest.raises(ProviderError) as raised:
             await OpenRouterClient(http=http, api_key="test-key").generate(
                 brand_name="Floogle", model="test/model"
             )
+
+    assert type(raised.value) is ProviderError
 
 
 @pytest.mark.asyncio
