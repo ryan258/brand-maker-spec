@@ -19,6 +19,9 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from brand_maker.config import Settings
+from brand_maker.library_styles import LIBRARY_CSS
+from brand_maker.library_ui import LIBRARY_SCRIPT
+from brand_maker.library_web import detail_page, library_page, not_found_page
 from brand_maker.models import (
     BrandRequest,
     BrandResponse,
@@ -33,6 +36,16 @@ from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 
 logger = logging.getLogger(__name__)
+
+BROWSER_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self'; connect-src 'self'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 def create_app(
@@ -87,18 +100,7 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def root() -> HTMLResponse:
-        return HTMLResponse(
-            HOME_PAGE,
-            headers={
-                "Content-Security-Policy": (
-                    "default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; "
-                    "img-src 'self'; connect-src 'self'; base-uri 'none'; "
-                    "form-action 'self'; frame-ancestors 'none'"
-                ),
-                "Referrer-Policy": "no-referrer",
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
+        return HTMLResponse(HOME_PAGE, headers=BROWSER_HEADERS)
 
     @app.get("/assets/app.js", include_in_schema=False)
     async def ui_script() -> Response:
@@ -107,6 +109,34 @@ def create_app(
             media_type="text/javascript",
             headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
         )
+
+    @app.get("/assets/library.js", include_in_schema=False)
+    async def library_script() -> Response:
+        return Response(
+            LIBRARY_SCRIPT,
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.get("/assets/library.css", include_in_schema=False)
+    async def library_styles() -> Response:
+        return Response(
+            LIBRARY_CSS,
+            media_type="text/css",
+            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.get("/brands", response_class=HTMLResponse, include_in_schema=False)
+    async def brand_library_page() -> HTMLResponse:
+        return HTMLResponse(library_page(), headers=BROWSER_HEADERS)
+
+    @app.get("/brands/{brand_id}", response_class=HTMLResponse, include_in_schema=False)
+    async def saved_brand_page(brand_id: UUID, request: Request) -> HTMLResponse:
+        store = cast(SQLiteBrandRepository, request.app.state.repository)
+        saved = await run_in_threadpool(store.get, brand_id)
+        if saved is None:
+            return HTMLResponse(not_found_page(), status_code=404, headers=BROWSER_HEADERS)
+        return HTMLResponse(detail_page(brand_id), headers=BROWSER_HEADERS)
 
     # FastAPI's supported custom-docs hooks let us retain its generated viewers while
     # adding project navigation: https://fastapi.tiangolo.com/how-to/custom-docs-ui-assets/
