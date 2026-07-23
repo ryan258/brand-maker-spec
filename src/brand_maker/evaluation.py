@@ -14,7 +14,7 @@ from pydantic import Field, model_validator
 from brand_maker.config import Settings
 from brand_maker.json_extract import extract_json_object
 from brand_maker.models import BrandKit, BrandResponse, ContractModel
-from brand_maker.openrouter import OpenRouterClient
+from brand_maker.openrouter import OpenRouterClient, ProviderError
 
 JUDGE_SYSTEM_INSTRUCTION = """You are a strict brand-kit evaluator. You score ONE parody brand kit.
 
@@ -189,7 +189,7 @@ def main() -> None:
     args = _parser().parse_args()
     try:
         exit_code = asyncio.run(_run(args))
-    except (OSError, ValueError) as exc:
+    except (OSError, ProviderError, ValueError) as exc:
         print(f"Evaluation failed: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     raise SystemExit(exit_code)

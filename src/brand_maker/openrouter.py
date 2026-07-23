@@ -1,5 +1,6 @@
 """Narrow, validated adapter for OpenRouter chat completions."""
 
+import json
 from typing import Any
 
 import httpx
@@ -94,24 +95,28 @@ class OpenRouterClient:
             "response_format": {"type": "json_object"},
         }
         try:
-            response = await self._http.post(
+            async with self._http.stream(
+                "POST",
                 OPENROUTER_URL,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
-            )
+            ) as response:
+                status_code = response.status_code
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > MAX_RESPONSE_BYTES:
+                        raise ProviderError("provider response exceeded the safety limit")
         except httpx.RequestError as exc:
             raise ModelUnavailable("model provider unavailable") from exc
 
-        if len(response.content) > MAX_RESPONSE_BYTES:
-            raise ProviderError("provider response exceeded the safety limit")
-
-        parsed = self._parse_json(response)
+        parsed = self._parse_json(bytes(content))
         top_error = parsed.get("error") if isinstance(parsed, dict) else None
-        if response.status_code >= 400 or isinstance(top_error, dict):
-            self._raise_classified(response.status_code, top_error)
+        if status_code >= 400 or isinstance(top_error, dict):
+            self._raise_classified(status_code, top_error)
 
         try:
             completion = _Completion.model_validate(parsed)
@@ -120,16 +125,16 @@ class OpenRouterClient:
 
         choice = completion.choices[0]
         if choice.error is not None or choice.finish_reason == "error":
-            self._raise_classified(response.status_code, choice.error)
+            self._raise_classified(status_code, choice.error)
         if choice.message is None:
             raise ProviderError("provider returned a malformed response")
         return choice.message.content
 
     @staticmethod
-    def _parse_json(response: httpx.Response) -> dict[str, Any]:
+    def _parse_json(content: bytes) -> dict[str, Any]:
         try:
-            parsed = response.json()
-        except ValueError as exc:
+            parsed = json.loads(content)
+        except (UnicodeDecodeError, ValueError) as exc:
             raise ProviderError("provider returned a malformed response") from exc
         if not isinstance(parsed, dict):
             raise ProviderError("provider returned a malformed response")
@@ -144,7 +149,8 @@ class OpenRouterClient:
 
         error_type = error.metadata.error_type if error.metadata else None
         message = error.message.casefold()
-        if status in {404, 502, 503} or error_type in {
+        model_missing = "model" in message and "not found" in message
+        if status in {404, 502, 503} or model_missing or error_type in {
             "not_found",
             "provider_unavailable",
             "provider_overloaded",

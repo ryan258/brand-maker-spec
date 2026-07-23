@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -27,8 +29,11 @@ def test_health_reports_up_when_configuration_is_valid() -> None:
     assert response.json() == {"status": "up"}
 
 
-def test_app_fails_during_startup_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_app_fails_during_startup_without_api_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
 
     with pytest.raises(ValidationError), TestClient(create_app()):
         pass

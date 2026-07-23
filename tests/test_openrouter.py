@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator
 
 import httpx
 import pytest
@@ -72,6 +73,27 @@ async def test_generate_classifies_unavailable_models(status: int, error_type: s
         client = OpenRouterClient(http=http, api_key="test-key")
         with pytest.raises(ModelUnavailable):
             await client.generate(brand_name="Floogle", model="missing/model")
+
+
+@pytest.mark.asyncio
+async def test_generate_classifies_model_not_found_message_as_unavailable() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": 400,
+                    "message": "The requested model was not found",
+                    "metadata": {"error_type": "invalid_request"},
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(ModelUnavailable):
+            await OpenRouterClient(http=http, api_key="test-key").generate(
+                brand_name="Floogle", model="missing/model"
+            )
 
 
 @pytest.mark.asyncio
@@ -170,3 +192,32 @@ async def test_complete_supports_a_custom_judge_prompt() -> None:
     assert observed["messages"] == [{"role": "system", "content": "Judge this."}]
     assert observed["temperature"] == 0.0
     assert observed["max_tokens"] == 300
+
+
+class CountingStream(httpx.AsyncByteStream):
+    def __init__(self) -> None:
+        self.chunks_read = 0
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for _ in range(3):
+            self.chunks_read += 1
+            yield b"x" * 600_000
+
+
+@pytest.mark.asyncio
+async def test_complete_stops_reading_when_response_exceeds_limit() -> None:
+    stream = CountingStream()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=stream)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(ProviderError, match="safety limit"):
+            await OpenRouterClient(http=http, api_key="test-key").complete(
+                messages=[{"role": "user", "content": "test"}],
+                model="test/model",
+                temperature=0.0,
+                max_tokens=10,
+            )
+
+    assert stream.chunks_read == 2

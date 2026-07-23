@@ -17,6 +17,23 @@ INVALID_DATA_MESSAGE = "Model returned invalid data after 3 attempts."
 REFUSAL_MESSAGE = "The model declined to build this brand."
 PROVIDER_MESSAGE = "Model provider unavailable."
 CONTEXT_MESSAGE = "Input too large."
+REFUSAL_PHRASES = (
+    "i cannot",
+    "i can't",
+    "cannot comply",
+    "can't assist",
+    "can't help",
+    "i won't",
+    "unable to assist",
+    "unable to comply",
+    "unable to help",
+    "decline to",
+)
+
+
+def _contains_refusal_language(raw: str) -> bool:
+    normalized = raw.casefold()
+    return any(phrase in normalized for phrase in REFUSAL_PHRASES)
 
 
 class Generator(Protocol):
@@ -83,6 +100,11 @@ class BrandPipeline:
                 if kit.brand_name != brand_name:
                     raise ValueError("model changed the requested brand name")
             except (ValidationError, ValueError):
+                if _contains_refusal_language(raw):
+                    if safety_rephrase:
+                        return BrandResponse(status="refused", message=REFUSAL_MESSAGE)
+                    safety_rephrase = True
+                    continue
                 invalid_attempts += 1
                 continue
 

@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from brand_maker.evaluation import (
     validate_deterministic,
 )
 from brand_maker.models import BrandResponse
+from brand_maker.openrouter import ProviderError
 
 
 def valid_kit_data() -> dict[str, object]:
@@ -145,3 +147,21 @@ async def test_judge_uses_exact_rubric_and_validates_json_response() -> None:
     }
     assert completer.calls[0]["model"] == "judge/model"
     assert completer.calls[0]["temperature"] == 0.0
+
+
+def test_cli_reports_provider_failure_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from brand_maker import evaluation
+
+    async def fail(args: object) -> int:
+        raise ProviderError("model provider unavailable")
+
+    monkeypatch.setattr(evaluation, "_run", fail)
+    monkeypatch.setattr(sys, "argv", ["brand-maker-eval", "response.json"])
+
+    with pytest.raises(SystemExit) as raised:
+        evaluation.main()
+
+    assert raised.value.code == 2
+    assert capsys.readouterr().err == "Evaluation failed: model provider unavailable\n"

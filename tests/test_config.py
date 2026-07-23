@@ -16,3 +16,15 @@ def test_settings_use_current_model_defaults() -> None:
     assert settings.fallback_model == "anthropic/claude-sonnet-4.5"
     assert settings.judge_model == "anthropic/claude-sonnet-4.5"
     assert settings.request_timeout_seconds == 45
+
+
+def test_settings_read_documented_environment_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "environment-key")
+    monkeypatch.setenv("BRAND_MAKER_PRIMARY_MODEL", "custom/primary")
+    monkeypatch.setenv("BRAND_MAKER_REQUEST_TIMEOUT_SECONDS", "12")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.openrouter_api_key.get_secret_value() == "environment-key"
+    assert settings.primary_model == "custom/primary"
+    assert settings.request_timeout_seconds == 12
