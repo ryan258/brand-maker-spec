@@ -1,0 +1,17 @@
+"""Accessible HTML shells for living-brand workspaces."""
+
+# Static HTML fragments are kept compact and visually grouped.
+# ruff: noqa: E501
+
+from uuid import UUID
+
+HEAD = """<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/workshop.css"><script src="/assets/workshop.js" defer></script>"""
+HEADER = """<a class="skip-link" href="#main-content">Skip to main content</a><header><a href="/">Brand System Maker</a><nav aria-label="Primary"><a href="/brand-systems">Living brands</a><a href="/brands">Kit library</a></nav></header>"""
+
+
+def workspace_index() -> str:
+    return f"""<!doctype html><html lang="en"><head>{HEAD}<title>Living brands</title></head><body data-page="index">{HEADER}<main id="main-content"><section class="intro"><p class="eyebrow">Local workspace</p><h1>Build a living brand system</h1><p>Create an editable system, one durable section at a time.</p><form id="workspace-form"><label for="workspace-name">Brand name</label><input id="workspace-name" required maxlength="300"><label for="owner-name">Your name</label><input id="owner-name" required maxlength="300"><button type="submit">Create workspace</button><p id="workspace-status" role="status" aria-live="polite"></p></form></section><section aria-labelledby="workspaces-heading"><h2 id="workspaces-heading">Your workspaces</h2><div id="workspace-list" aria-busy="true"><p>Loading…</p></div></section></main></body></html>"""
+
+
+def workspace_detail(brand_id: UUID) -> str:
+    return f'''<!doctype html><html lang="en"><head>{HEAD}<title>Brand workshop</title></head><body data-page="workshop" data-brand-id="{brand_id}">{HEADER}<main id="main-content"><div class="workshop-head"><p class="eyebrow">Living brand</p><h1 id="brand-title">Loading workspace…</h1><p id="revision-label"></p></div><section class="generation-panel" aria-labelledby="generation-heading"><h2 id="generation-heading">Generate a starting point</h2><p>Generate the complete draft or only the selected section and its prerequisites.</p><div class="button-row"><button id="generate-complete" type="button">Generate complete draft</button><button id="generate-section" type="button">Generate selected section</button><button id="pause-generation" type="button" disabled>Pause generation</button><button id="cancel-generation" type="button" disabled>Cancel generation</button></div><p id="generation-status" role="status" aria-live="polite"></p><ol id="generation-progress" aria-label="Generation progress"></ol></section><div class="workshop-grid"><nav id="section-navigation" aria-label="Brand sections"></nav><section aria-labelledby="section-title"><form id="section-form"><h2 id="section-title">Select a section</h2><label for="section-status">Section status</label><select id="section-status"><option>incomplete</option><option>draft</option><option>reviewed</option><option>approved</option></select><div id="block-editors"></div><button id="add-paragraph" type="button">Add paragraph</button><button type="submit">Save section</button><p id="editor-status" role="status" aria-live="polite"></p></form></section></div></main></body></html>'''
