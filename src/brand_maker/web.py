@@ -108,12 +108,6 @@ HOME_PAGE = """<!doctype html>
     }
     .button:hover { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
     .button.secondary { background: transparent; color: var(--ink); }
-    .output-card { border: 2px solid var(--ink); border-radius: var(--radius); background: var(--paper-strong); box-shadow: var(--shadow); }
-    .output-card header { padding: 0.65rem 1rem; border-bottom: 2px solid var(--ink); font-size: 0.75rem; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
-    .output-card ul { margin: 0; padding: 1rem; list-style: none; }
-    .output-card li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
-    .output-card li:last-child { border: 0; }
-    .tick { color: #28643f; font-weight: 900; }
     [hidden] { display: none !important; }
     .generator {
       border: 2px solid var(--ink);
@@ -262,7 +256,6 @@ HOME_PAGE = """<!doctype html>
         --code-ink: #f6f2e9;
         --shadow: 6px 6px 0 #738078;
       }
-      .tick { color: var(--signal); }
       .button { border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
       .button:hover { box-shadow: 1px 1px 0 var(--ink); }
     }
@@ -292,7 +285,7 @@ HOME_PAGE = """<!doctype html>
         <div>
           <p class="eyebrow"><span>Local tool · AI assisted</span></p>
           <h1>One name in. One brand world out.</h1>
-          <p class="hero-copy">Brand System Maker turns a parody brand name into a structured, validated creative kit—from strategy and voice to colors and campaign ideas.</p>
+          <p class="hero-copy">Brand System Maker turns a parody brand name into a structured, validated kit with identity, voice, personality, and color direction.</p>
           <div class="actions"><a class="button" href="/docs">Open the API console</a><a class="button secondary" href="#quick-start">Follow the quick start</a></div>
         </div>
         <aside class="generator" aria-labelledby="generator-heading">
@@ -323,8 +316,8 @@ HOME_PAGE = """<!doctype html>
         <div class="section-heading"><p class="kicker">The whole idea</p><h2 id="how-heading">A small pipeline with a useful finish line.</h2></div>
         <div class="steps">
           <article class="step"><h3>Name it</h3><p>Send one original parody brand name, between 1 and 80 characters.</p></article>
-          <article class="step"><h3>Make it</h3><p>Two model passes generate the strategy, creative system, and visual direction.</p></article>
-          <article class="step"><h3>Check it</h3><p>The service validates the result and returns a quality score with actionable feedback.</p></article>
+          <article class="step"><h3>Make it</h3><p>The model develops the identity, positioning, personality, and palette.</p></article>
+          <article class="step"><h3>Check it</h3><p>The service validates every required field before returning the complete kit.</p></article>
         </div>
       </div>
     </section>
@@ -353,7 +346,7 @@ uv run brand-maker</code></pre><p>Leave that terminal open. The app is ready whe
     <section aria-labelledby="responses-heading">
       <div class="shell">
         <div class="section-heading"><p class="kicker">What comes back</p><h2 id="responses-heading">Readable outcomes, including when things go wrong.</h2></div>
-        <dl class="status-list"><div><dt>ok</dt><dd>A complete, validated kit and its quality evaluation.</dd></div><div><dt>refused</dt><dd>The name was not safe or suitable to develop.</dd></div><div><dt>error</dt><dd>The provider was unavailable or could not return a valid kit.</dd></div></dl>
+        <dl class="status-list"><div><dt>ok</dt><dd>A complete kit that passed every structural check.</dd></div><div><dt>refused</dt><dd>The name was not safe or suitable to develop.</dd></div><div><dt>error</dt><dd>The provider was unavailable or could not return a valid kit.</dd></div></dl>
       </div>
     </section>
   </main>

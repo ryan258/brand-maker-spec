@@ -170,6 +170,8 @@ input.addEventListener("input", updateCount);
 resetButton.addEventListener("click", () => {
   results.hidden = true;
   currentResponse = null;
+  input.value = "";
+  updateCount();
   input.focus();
 });
 copyButton.addEventListener("click", async () => {

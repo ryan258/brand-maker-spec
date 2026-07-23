@@ -36,6 +36,7 @@ def test_root_is_an_accessible_getting_started_page() -> None:
     assert 'href="/health"' in response.text
     assert "OPENROUTER_API_KEY" in response.text
     assert "POST /brand" in response.text
+    assert "identity, voice, personality, and color" in response.text
     assert "test-key" not in response.text
     assert '<form id="brand-form"' in response.text
     assert 'input id="brand-name"' in response.text
