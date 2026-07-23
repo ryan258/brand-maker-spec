@@ -1,7 +1,15 @@
 import pytest
 from pydantic import ValidationError
 
-from brand_maker.models import BrandKit, BrandRequest, BrandResponse, ColorPalette
+from brand_maker.models import (
+    BrandKit,
+    BrandRequest,
+    BrandResponse,
+    BrandSummary,
+    ColorPalette,
+    SavedBrand,
+    SavedBrandPage,
+)
 
 
 def valid_kit_data() -> dict[str, object]:
@@ -70,3 +78,21 @@ def test_models_reject_unknown_fields() -> None:
 
     with pytest.raises(ValidationError):
         BrandKit.model_validate(data)
+
+
+def test_saved_brand_summary_and_page_contracts() -> None:
+    saved = SavedBrand.model_validate(
+        {
+            "id": "7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4",
+            "created_at": "2026-07-23T12:00:00Z",
+            "kit": valid_kit_data(),
+        }
+    )
+    summary = BrandSummary.from_saved(saved)
+    page = SavedBrandPage(
+        items=[summary], page=1, page_size=12, total_items=1, total_pages=1
+    )
+
+    assert summary.brand_name == "Floogle"
+    assert summary.color_palette.primary == "#4285F4"
+    assert page.items == [summary]

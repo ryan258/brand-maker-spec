@@ -1,6 +1,8 @@
 """Public request and response contracts for the service."""
 
+from datetime import datetime
 from typing import Literal, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -63,3 +65,43 @@ class BrandResponse(ContractModel):
         if self.status != "ok" and (self.kit is not None or not self.message):
             raise ValueError("non-ok responses require a message and no kit")
         return self
+
+
+class SavedBrand(ContractModel):
+    """An immutable generated kit with server-owned identity and creation time."""
+
+    id: UUID
+    created_at: datetime
+    kit: BrandKit
+
+
+class BrandSummary(ContractModel):
+    """The compact brand representation returned by collection endpoints."""
+
+    id: UUID
+    created_at: datetime
+    brand_name: str
+    parody_target: str
+    tagline: str
+    color_palette: ColorPalette
+
+    @classmethod
+    def from_saved(cls, saved: SavedBrand) -> Self:
+        return cls(
+            id=saved.id,
+            created_at=saved.created_at,
+            brand_name=saved.kit.brand_name,
+            parody_target=saved.kit.parody_target,
+            tagline=saved.kit.tagline,
+            color_palette=saved.kit.color_palette,
+        )
+
+
+class SavedBrandPage(ContractModel):
+    """A bounded, newest-first page from the local brand library."""
+
+    items: list[BrandSummary]
+    page: int = Field(..., ge=1)
+    page_size: int = Field(..., ge=1, le=100)
+    total_items: int = Field(..., ge=0)
+    total_pages: int = Field(..., ge=0)
