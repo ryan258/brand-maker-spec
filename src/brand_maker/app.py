@@ -19,6 +19,7 @@ from brand_maker.config import Settings
 from brand_maker.models import BrandRequest, BrandResponse
 from brand_maker.openrouter import OpenRouterClient
 from brand_maker.pipeline import BrandBuilder, BrandPipeline
+from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 
 logger = logging.getLogger(__name__)
@@ -69,8 +70,27 @@ def create_app(
     openapi_url = app.openapi_url or "/openapi.json"
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    async def root() -> str:
-        return HOME_PAGE
+    async def root() -> HTMLResponse:
+        return HTMLResponse(
+            HOME_PAGE,
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; "
+                    "img-src 'self'; connect-src 'self'; base-uri 'none'; "
+                    "form-action 'self'; frame-ancestors 'none'"
+                ),
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.get("/assets/app.js", include_in_schema=False)
+    async def ui_script() -> Response:
+        return Response(
+            UI_SCRIPT,
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+        )
 
     # FastAPI's supported custom-docs hooks let us retain its generated viewers while
     # adding project navigation: https://fastapi.tiangolo.com/how-to/custom-docs-ui-assets/

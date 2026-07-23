@@ -37,6 +37,28 @@ def test_root_is_an_accessible_getting_started_page() -> None:
     assert "OPENROUTER_API_KEY" in response.text
     assert "POST /brand" in response.text
     assert "test-key" not in response.text
+    assert '<form id="brand-form"' in response.text
+    assert 'input id="brand-name"' in response.text
+    assert 'maxlength="80"' in response.text
+    assert 'id="generation-status"' in response.text
+    assert 'id="brand-results"' in response.text
+    assert 'src="/assets/app.js"' in response.text
+    assert "default-src 'self'" in response.headers["content-security-policy"]
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_generation_ui_script_is_served_without_html_injection_apis() -> None:
+    settings = Settings(_env_file=None, openrouter_api_key="test-key")
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/assets/app.js")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/javascript")
+    assert 'fetch("/brand"' in response.text
+    assert "textContent" in response.text
+    assert "innerHTML" not in response.text
+    assert "eval(" not in response.text
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc"])
