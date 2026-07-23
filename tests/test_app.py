@@ -34,6 +34,7 @@ def test_root_is_an_accessible_getting_started_page() -> None:
     assert 'href="/docs"' in response.text
     assert 'href="/redoc"' in response.text
     assert 'href="/health"' in response.text
+    assert 'href="/brands"' in response.text
     assert "OPENROUTER_API_KEY" in response.text
     assert "POST /brand" in response.text
     assert "identity, voice, personality, and color" in response.text
@@ -56,7 +57,8 @@ def test_generation_ui_script_is_served_without_html_injection_apis() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/javascript")
-    assert 'fetch("/brand"' in response.text
+    assert 'fetch("/api/brands"' in response.text
+    assert "view-saved-brand" in response.text
     assert "textContent" in response.text
     assert "innerHTML" not in response.text
     assert "eval(" not in response.text

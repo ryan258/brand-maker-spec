@@ -157,6 +157,8 @@ HOME_PAGE = """<!doctype html>
     .result-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.75rem; }
     .quiet-button {
       min-height: 2.75rem;
+      display: inline-flex;
+      align-items: center;
       padding: 0.55rem 0.8rem;
       border: 2px solid var(--ink);
       border-radius: var(--radius);
@@ -165,6 +167,7 @@ HOME_PAGE = """<!doctype html>
       cursor: pointer;
       font: inherit;
       font-weight: 800;
+      text-decoration: none;
     }
     .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .result-card { min-width: 0; padding: 1.5rem; border: 1px solid var(--line); background: var(--paper); }
@@ -274,7 +277,7 @@ HOME_PAGE = """<!doctype html>
         <span class="mark" aria-hidden="true">BSM</span><span>Brand System Maker</span>
       </a>
       <nav aria-label="Primary navigation">
-        <ul><li><a href="#how-it-works">How it works</a></li><li><a href="#quick-start">Quick start</a></li><li><a href="/docs">API docs</a></li></ul>
+        <ul><li><a href="#how-it-works">How it works</a></li><li><a href="/brands">Library</a></li><li><a href="#quick-start">Quick start</a></li><li><a href="/docs">API docs</a></li></ul>
       </nav>
     </div>
   </header>
@@ -305,7 +308,7 @@ HOME_PAGE = """<!doctype html>
       <div class="shell">
         <header class="results-header">
           <div><p class="result-kind success" id="result-kind">Brand kit ready</p><h2 id="results-heading">Your brand</h2><p class="result-target" id="result-target"></p></div>
-          <div class="result-actions"><button class="quiet-button" id="copy-result" type="button">Copy JSON</button><button class="quiet-button" id="reset-generator" type="button">Make another</button></div>
+          <div class="result-actions"><a class="quiet-button" id="view-saved-brand" href="/brands" hidden>View full brand</a><button class="quiet-button" id="copy-result" type="button">Copy JSON</button><button class="quiet-button" id="reset-generator" type="button">Make another</button></div>
         </header>
         <div class="result-grid" id="result-content"></div>
       </div>
@@ -351,7 +354,7 @@ uv run brand-maker</code></pre><p>Leave that terminal open. The app is ready whe
     </section>
   </main>
 
-  <footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for creative exploration.</span></p><div class="footer-links"><a href="/">Home</a><a href="/docs">Swagger</a><a href="/redoc">ReDoc</a><a href="/health">Health</a></div></div></footer>
+  <footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for creative exploration.</span></p><div class="footer-links"><a href="/">Home</a><a href="/brands">Library</a><a href="/docs">Swagger</a><a href="/redoc">ReDoc</a><a href="/health">Health</a></div></div></footer>
 </body>
 </html>
 """

@@ -1,9 +1,9 @@
 # Brand System Maker
 
-A stateless FastAPI service that turns one parody brand name into a complete,
-validated brand kit through OpenRouter. It implements the product contract in
-`spec.md`, including bounded schema retries, one refusal rephrase, and one model
-failover.
+A local-first FastAPI application that turns one parody brand name into a complete,
+validated brand kit through OpenRouter. Successful kits are saved to a local SQLite
+library. The generation pipeline implements the product contract in `spec.md`,
+including bounded schema retries, one refusal rephrase, and one model failover.
 
 ## Quick start
 
@@ -29,9 +29,17 @@ curl -X POST http://127.0.0.1:8000/brand \
 
 Opening `http://127.0.0.1:8000/` shows the browser workspace: enter a parody name,
 generate a kit, and review or copy the identity, voice, personality, and palette.
-The same page includes a plain-language first-run guide. Interactive OpenAPI
-documentation is available at `http://127.0.0.1:8000/docs`, and both documentation
-viewers link back to the homepage.
+Every successful generation is saved locally. Open `http://127.0.0.1:8000/brands`
+to browse the collection; each card links to its complete brand page. The homepage
+also includes a plain-language first-run guide. Interactive OpenAPI documentation is
+available at `http://127.0.0.1:8000/docs`.
+
+The original `POST /brand` endpoint remains stateless and backward-compatible. The
+browser uses the persistent library API:
+
+- `POST /api/brands`: generate and save a successful kit.
+- `GET /api/brands?page=1&pageSize=12`: list saved brands newest first.
+- `GET /api/brands/{id}`: retrieve one complete saved brand.
 
 ## API outcomes
 
@@ -53,6 +61,10 @@ service does not expose provider payloads, credentials, or partial model output.
 | `BRAND_MAKER_FALLBACK_MODEL` | No | `anthropic/claude-sonnet-4.5` |
 | `BRAND_MAKER_JUDGE_MODEL` | No | `anthropic/claude-sonnet-4.5` |
 | `BRAND_MAKER_REQUEST_TIMEOUT_SECONDS` | No | `45` |
+| `BRAND_MAKER_DATABASE_PATH` | No | `.brand-maker/brands.db` |
+
+The database is created on the first library operation and is excluded from Git.
+Back up the configured database file if the generated collection matters to you.
 
 The spec's original `anthropic/claude-3.5-sonnet` fallback is retired. The shipped
 default is the currently available Sonnet 4.5 slug; every model remains overridable
@@ -92,6 +104,10 @@ and `2` for invalid input or evaluation failure.
 - `app.py`: lifespan-owned HTTP client and FastAPI routes.
 - `web.py`: dependency-free homepage, favicon, and documentation navigation.
 - `ui.py`: safe browser-side generation and result rendering behavior.
+- `storage.py`: parameterized SQLite persistence and bounded pagination.
+- `library_web.py`: collection and full-detail HTML shells.
+- `library_ui.py`: safe collection/detail loading and rendering behavior.
+- `library_styles.py`: shared responsive library design system.
 - `evaluation.py`: deterministic checks and the exact LLM judge rubric.
 
 Framework patterns follow the official documentation for

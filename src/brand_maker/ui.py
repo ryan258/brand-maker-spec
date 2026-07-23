@@ -18,6 +18,7 @@ const resultTarget = document.getElementById("result-target");
 const resultContent = document.getElementById("result-content");
 const copyButton = document.getElementById("copy-result");
 const resetButton = document.getElementById("reset-generator");
+const viewSavedBrand = document.getElementById("view-saved-brand");
 
 let currentResponse = null;
 
@@ -99,6 +100,10 @@ function renderSuccess(response) {
 
   resultContent.append(identity, voice, renderPalette(kit.color_palette));
   copyButton.hidden = false;
+  if (response.id) {
+    viewSavedBrand.href = `/brands/${encodeURIComponent(response.id)}`;
+    viewSavedBrand.hidden = false;
+  }
   results.hidden = false;
   results.focus({ preventScroll: true });
   results.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -115,6 +120,7 @@ function renderMessage(kind, message) {
     ? "Use an original, lighthearted name that does not target a person or protected group."
     : "Check that the server is running and try again. If the problem continues, verify your provider configuration."));
   copyButton.hidden = true;
+  viewSavedBrand.hidden = true;
   results.hidden = false;
   results.focus({ preventScroll: true });
   results.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -146,7 +152,7 @@ form.addEventListener("submit", async (event) => {
   status.textContent = `Building ${brandName}. This can take about a minute.`;
 
   try {
-    const response = await fetch("/brand", {
+    const response = await fetch("/api/brands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ brand_name: brandName }),
@@ -170,6 +176,7 @@ input.addEventListener("input", updateCount);
 resetButton.addEventListener("click", () => {
   results.hidden = true;
   currentResponse = null;
+  viewSavedBrand.hidden = true;
   input.value = "";
   updateCount();
   input.focus();
