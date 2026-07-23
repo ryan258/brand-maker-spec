@@ -27,10 +27,10 @@ curl -X POST http://127.0.0.1:8000/brand \
   -d '{"brand_name":"Floogle"}'
 ```
 
-Opening `http://127.0.0.1:8000/` shows a small API directory. It is not a
-graphical front end—the v1 specification intentionally defines an API-only app.
-Interactive OpenAPI documentation is available at
-`http://127.0.0.1:8000/docs` while the server is running.
+Opening `http://127.0.0.1:8000/` shows the project homepage with a plain-language
+introduction and a complete first-run guide. Interactive OpenAPI documentation is
+available at `http://127.0.0.1:8000/docs`, and both documentation viewers link back
+to the homepage.
 
 ## API outcomes
 
@@ -89,6 +89,7 @@ and `2` for invalid input or evaluation failure.
 - `json_extract.py`: defensive extraction of object-shaped model output.
 - `pipeline.py`: retry, refusal, failover, and terminal-outcome state machine.
 - `app.py`: lifespan-owned HTTP client and FastAPI routes.
+- `web.py`: dependency-free homepage, favicon, and documentation navigation.
 - `evaluation.py`: deterministic checks and the exact LLM judge rubric.
 
 Framework patterns follow the official documentation for

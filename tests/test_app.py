@@ -19,19 +19,48 @@ class FakePipeline:
         return self.response
 
 
-def test_root_describes_available_api_routes() -> None:
+def test_root_is_an_accessible_getting_started_page() -> None:
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
 
     with TestClient(create_app(settings=settings)) as client:
         response = client.get("/")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "service": "Brand System Maker",
-        "docs": "/docs",
-        "health": "/health",
-        "generate": "POST /brand",
-    }
+    assert response.headers["content-type"].startswith("text/html")
+    assert '<html lang="en">' in response.text
+    assert '<a class="skip-link" href="#main-content">Skip to main content</a>' in response.text
+    assert '<main id="main-content">' in response.text
+    assert response.text.count("<h1") == 1
+    assert 'href="/docs"' in response.text
+    assert 'href="/redoc"' in response.text
+    assert 'href="/health"' in response.text
+    assert "OPENROUTER_API_KEY" in response.text
+    assert "POST /brand" in response.text
+    assert "test-key" not in response.text
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc"])
+def test_documentation_pages_link_back_home(path: str) -> None:
+    settings = Settings(_env_file=None, openrouter_api_key="test-key")
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get(path)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert int(response.headers["content-length"]) == len(response.content)
+    assert '<a class="app-home-link" href="/"' in response.text
+    assert "Back to home" in response.text
+
+
+def test_favicon_is_available() -> None:
+    settings = Settings(_env_file=None, openrouter_api_key="test-key")
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/favicon.svg")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
 
 
 def test_health_reports_up_when_configuration_is_valid() -> None:

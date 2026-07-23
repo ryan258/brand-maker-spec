@@ -7,12 +7,19 @@ from typing import cast
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
+from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
 from brand_maker.config import Settings
 from brand_maker.models import BrandRequest, BrandResponse
 from brand_maker.openrouter import OpenRouterClient
 from brand_maker.pipeline import BrandBuilder, BrandPipeline
+from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +61,40 @@ def create_app(
         title="Brand System Maker",
         version="0.1.0",
         description="Generate one validated parody brand kit from one brand name.",
+        docs_url=None,
+        redoc_url=None,
+        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
         lifespan=lifespan,
     )
+    openapi_url = app.openapi_url or "/openapi.json"
 
-    @app.get("/", tags=["operations"])
-    async def root() -> dict[str, str]:
-        return {
-            "service": "Brand System Maker",
-            "docs": "/docs",
-            "health": "/health",
-            "generate": "POST /brand",
-        }
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def root() -> str:
+        return HOME_PAGE
+
+    # FastAPI's supported custom-docs hooks let us retain its generated viewers while
+    # adding project navigation: https://fastapi.tiangolo.com/how-to/custom-docs-ui-assets/
+    @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
+    async def swagger_docs() -> HTMLResponse:
+        page = get_swagger_ui_html(
+            openapi_url=openapi_url,
+            title=f"{app.title} — API console",
+            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        )
+        return add_home_navigation(page)
+
+    @app.get("/docs/oauth2-redirect", include_in_schema=False)
+    async def swagger_oauth2_redirect() -> HTMLResponse:
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
+    async def redoc_docs() -> HTMLResponse:
+        page = get_redoc_html(openapi_url=openapi_url, title=f"{app.title} — Reference")
+        return add_home_navigation(page)
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def favicon() -> Response:
+        return Response(FAVICON, media_type="image/svg+xml")
 
     @app.get("/health", tags=["operations"])
     async def health() -> dict[str, str]:
