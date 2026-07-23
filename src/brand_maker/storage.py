@@ -1,7 +1,8 @@
 """SQLite persistence for immutable generated brand kits."""
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -31,11 +32,19 @@ class SQLiteBrandRepository:
         self._id_factory = id_factory
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self._path, timeout=5.0)
-        connection.execute(SCHEMA)
-        return connection
+        try:
+            connection.execute(SCHEMA)
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     @staticmethod
     def _from_row(row: tuple[str, str, str]) -> SavedBrand:

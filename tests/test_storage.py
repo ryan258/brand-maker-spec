@@ -1,6 +1,9 @@
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
+
+import pytest
 
 from brand_maker.models import BrandKit
 from brand_maker.storage import SQLiteBrandRepository
@@ -72,3 +75,24 @@ def test_repository_returns_none_for_unknown_brand(tmp_path: Path) -> None:
     store = SQLiteBrandRepository(tmp_path / "brands.db")
 
     assert store.get(UUID("7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4")) is None
+
+
+def test_repository_closes_each_connection_after_use(
+    tmp_path: Path, monkeypatch
+) -> None:
+    connections: list[sqlite3.Connection] = []
+    real_connect = sqlite3.connect
+
+    def tracking_connect(*args, **kwargs) -> sqlite3.Connection:
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr("brand_maker.storage.sqlite3.connect", tracking_connect)
+    SQLiteBrandRepository(tmp_path / "brands.db").get(
+        UUID("7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4")
+    )
+
+    assert len(connections) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        connections[0].execute("SELECT 1")

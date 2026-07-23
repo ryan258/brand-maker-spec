@@ -101,7 +101,14 @@ async function loadLibrary() {
     root.setAttribute("aria-busy", "false");
     count.textContent = `${payload.total_items} saved ${payload.total_items === 1 ? "brand" : "brands"}`;
     if (payload.items.length === 0) {
-      root.append(messageState("empty", "No brands yet", "Generate your first brand kit and it will appear here automatically.", "Create your first brand", "/#brand-form"));
+      const hasBrands = payload.total_items > 0;
+      root.append(messageState(
+        "empty",
+        hasBrands ? "No brands on this page" : "No brands yet",
+        hasBrands ? "Return to the beginning of your collection." : "Generate your first brand kit and it will appear here automatically.",
+        hasBrands ? "Go to the first page" : "Create your first brand",
+        hasBrands ? "/brands" : "/#brand-form",
+      ));
       return;
     }
     const grid = element("div", "brand-grid");
@@ -180,11 +187,12 @@ function renderDetail(saved) {
 }
 
 async function copyDetail(event) {
+  const button = event.currentTarget;
   try {
     await navigator.clipboard.writeText(JSON.stringify(detailPayload, null, 2));
-    event.currentTarget.textContent = "Copied";
+    button.textContent = "Copied";
   } catch {
-    event.currentTarget.textContent = "Copy unavailable";
+    button.textContent = "Copy unavailable";
   }
 }
 
