@@ -148,3 +148,25 @@ async def test_generate_rejects_malformed_success_envelope() -> None:
             await OpenRouterClient(http=http, api_key="test-key").generate(
                 brand_name="Floogle", model="test/model"
             )
+
+
+@pytest.mark.asyncio
+async def test_complete_supports_a_custom_judge_prompt() -> None:
+    observed: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.update(json.loads(request.content))
+        return httpx.Response(200, json=make_response('{"overall":4.5}'))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        content = await OpenRouterClient(http=http, api_key="test-key").complete(
+            messages=[{"role": "system", "content": "Judge this."}],
+            model="judge/model",
+            temperature=0.0,
+            max_tokens=300,
+        )
+
+    assert content == '{"overall":4.5}'
+    assert observed["messages"] == [{"role": "system", "content": "Judge this."}]
+    assert observed["temperature"] == 0.0
+    assert observed["max_tokens"] == 300

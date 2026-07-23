@@ -30,6 +30,11 @@ class Settings(BaseSettings):
         min_length=1,
         validation_alias="BRAND_MAKER_FALLBACK_MODEL",
     )
+    judge_model: str = Field(
+        "anthropic/claude-sonnet-4.5",
+        min_length=1,
+        validation_alias="BRAND_MAKER_JUDGE_MODEL",
+    )
     request_timeout_seconds: float = Field(
         45.0,
         gt=0,

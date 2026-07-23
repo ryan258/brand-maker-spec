@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "kit": {
+    "brand_name": "Floogle",
+    "parody_target": "Google",
+    "tagline": "Search less. Guess more.",
+    "description": "Floogle is the search engine that returns confident answers to questions you never asked. It indexes vibes, not facts, and ranks results by how funny they are. Millions of users trust Floogle to make their bad decisions feel researched.",
+    "brand_voice": "Cheerful, over-confident, and technically wrong on purpose. Talks like a startup founder who has never been corrected. Uses big claims and tiny disclaimers. Friendly, fast, and slightly unhinged.",
+    "personality": ["Overconfident", "Playful", "Chaotic", "Helpful", "Deadpan"],
+    "color_palette": {
+      "primary": "#4285F4",
+      "secondary": "#EA4335",
+      "accent": "#FBBC05",
+      "background": "#FFFFFF"
+    }
+  },
+  "message": null
+}

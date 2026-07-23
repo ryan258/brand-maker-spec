@@ -69,11 +69,28 @@ class OpenRouterClient:
         model: str,
         safety_rephrase: bool = False,
     ) -> str:
+        return await self.complete(
+            messages=generation_messages(brand_name, safety_rephrase=safety_rephrase),
+            model=model,
+            temperature=0.8,
+            max_tokens=1500,
+        )
+
+    async def complete(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Send a bounded JSON completion request and return assistant content."""
+
         payload = {
             "model": model,
-            "messages": generation_messages(brand_name, safety_rephrase=safety_rephrase),
-            "temperature": 0.8,
-            "max_tokens": 1500,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
         try:
