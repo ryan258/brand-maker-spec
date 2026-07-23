@@ -148,16 +148,30 @@ class OpenRouterClient:
             error = _ErrorDetail(code=status, message="")
 
         error_type = error.metadata.error_type if error.metadata else None
+        error_code = str(error.code if error.code is not None else status)
+        http_status = str(status)
         message = error.message.casefold()
         model_missing = "model" in message and "not found" in message
-        if status in {404, 502, 503} or model_missing or error_type in {
-            "not_found",
-            "provider_unavailable",
-            "provider_overloaded",
-        }:
+        unavailable_codes = {"404", "429", "502", "503"}
+        if (
+            http_status in unavailable_codes
+            or error_code in unavailable_codes
+            or model_missing
+            or error_type
+            in {
+                "not_found",
+                "provider_unavailable",
+                "provider_overloaded",
+                "rate_limit_exceeded",
+            }
+        ):
             raise ModelUnavailable("model provider unavailable")
         if error_type == "context_length_exceeded" or "context length" in message:
             raise ContextOverflow("input too large")
-        if error_type in {"refusal", "content_policy_violation"} or status == 403:
+        if (
+            error_type in {"refusal", "content_policy_violation"}
+            or http_status == "403"
+            or error_code == "403"
+        ):
             raise ProviderRefusal("model declined the request")
         raise ProviderError("model provider request failed")

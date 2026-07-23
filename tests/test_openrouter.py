@@ -54,7 +54,12 @@ async def test_generate_sends_bounded_json_request_without_leaking_key() -> None
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "error_type"),
-    [(404, "not_found"), (502, "provider_unavailable"), (503, "provider_overloaded")],
+    [
+        (404, "not_found"),
+        (429, "rate_limit_exceeded"),
+        (502, "provider_unavailable"),
+        (503, "provider_overloaded"),
+    ],
 )
 async def test_generate_classifies_unavailable_models(status: int, error_type: str) -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -97,6 +102,27 @@ async def test_generate_classifies_model_not_found_message_as_unavailable() -> N
 
 
 @pytest.mark.asyncio
+async def test_generate_classifies_embedded_rate_limit_as_unavailable() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "error": {
+                    "code": 429,
+                    "message": "Provider returned error",
+                },
+                "choices": [],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(ModelUnavailable):
+            await OpenRouterClient(http=http, api_key="test-key").generate(
+                brand_name="Floogle", model="busy/model"
+            )
+
+
+@pytest.mark.asyncio
 async def test_generate_classifies_context_overflow() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -127,6 +153,26 @@ async def test_generate_classifies_provider_refusal() -> None:
                     "code": 400,
                     "message": "refused",
                     "metadata": {"error_type": "refusal"},
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(ProviderRefusal):
+            await OpenRouterClient(http=http, api_key="test-key").generate(
+                brand_name="Floogle", model="test/model"
+            )
+
+
+@pytest.mark.asyncio
+async def test_generate_preserves_http_status_when_embedded_code_differs() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={
+                "error": {
+                    "code": "provider_policy",
+                    "message": "request declined",
                 }
             },
         )
