@@ -11,8 +11,8 @@ HOME_PAGE = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="A plain-language guide to running Brand System Maker.">
-  <title>Brand System Maker — One name in, one brand kit out</title>
+  <meta name="description" content="Build, publish, export, and check a living brand system locally.">
+  <title>Brand System Maker — Your local living brand workshop</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <script src="/assets/app.js" defer></script>
   <style>
@@ -277,7 +277,7 @@ HOME_PAGE = """<!doctype html>
         <span class="mark" aria-hidden="true">BSM</span><span>Brand System Maker</span>
       </a>
       <nav aria-label="Primary navigation">
-        <ul><li><a href="#how-it-works">How it works</a></li><li><a href="/brands">Library</a></li><li><a href="#quick-start">Quick start</a></li><li><a href="/docs">API docs</a></li></ul>
+        <ul><li><a href="/brand-systems">Living brands</a></li><li><a href="/compliance">Compliance</a></li><li><a href="/brands">Kit library</a></li><li><a href="/docs">API docs</a></li></ul>
       </nav>
     </div>
   </header>
@@ -354,7 +354,7 @@ uv run brand-maker</code></pre><p>Leave that terminal open. The app is ready whe
     </section>
   </main>
 
-  <footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for creative exploration.</span></p><div class="footer-links"><a href="/">Home</a><a href="/brands">Library</a><a href="/docs">Swagger</a><a href="/redoc">ReDoc</a><a href="/health">Health</a></div></div></footer>
+  <footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for durable creative systems.</span></p><div class="footer-links"><a href="/brand-systems">Living brands</a><a href="/compliance">Compliance</a><a href="/brands">Kit library</a><a href="/docs">Swagger</a><a href="/redoc">ReDoc</a><a href="/health">Health</a></div></div></footer>
 </body>
 </html>
 """

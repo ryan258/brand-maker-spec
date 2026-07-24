@@ -118,8 +118,12 @@ def test_brand_library_validates_pagination_and_unknown_ids(tmp_path: Path) -> N
         create_app(settings=settings, pipeline=pipeline, repository=store)
     ) as client:
         invalid_page = client.get("/api/brands?page=0&pageSize=101")
+        oversized_page = client.get(
+            "/api/brands?page=999999999999999999999999999999&pageSize=12"
+        )
         missing = client.get("/api/brands/7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4")
 
     assert invalid_page.status_code == 422
+    assert oversized_page.status_code == 422
     assert missing.status_code == 404
     assert missing.json() == {"detail": "Brand not found."}

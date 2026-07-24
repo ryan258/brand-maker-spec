@@ -15,10 +15,10 @@ HEAD = """<meta charset="utf-8">
 HEADER = """<a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header"><div class="shell">
     <a class="wordmark" href="/" aria-label="Brand System Maker home"><span class="mark" aria-hidden="true">BSM</span><span>Brand System Maker</span></a>
-    <nav aria-label="Primary navigation"><ul><li><a href="/#brand-form">Create</a></li><li><a href="/brands" aria-current="page">Brand library</a></li><li><a href="/docs">API docs</a></li></ul></nav>
+    <nav aria-label="Primary navigation"><ul><li><a href="/brand-systems">Living brands</a></li><li><a href="/compliance">Compliance</a></li><li><a href="/brands" aria-current="page">Kit library</a></li><li><a href="/docs">API docs</a></li></ul></nav>
   </div></header>"""
 
-FOOTER = """<footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for creative exploration.</span></p><div class="footer-links"><a href="/">Home</a><a href="/#brand-form">Create</a><a href="/brands">Library</a><a href="/docs">API</a></div></div></footer>"""
+FOOTER = """<footer><div class="shell"><p><strong>Brand System Maker</strong><br><span>Built for durable creative systems.</span></p><div class="footer-links"><a href="/brand-systems">Living brands</a><a href="/compliance">Compliance</a><a href="/brands">Kit library</a><a href="/docs">API</a></div></div></footer>"""
 
 
 def library_page() -> str:
