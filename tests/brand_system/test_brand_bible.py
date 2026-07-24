@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 
 from brand_maker.app import create_app
-from brand_maker.brand_bible import render_brand_bible
+from brand_maker.brand_bible import _brand_theme, render_brand_bible
 from brand_maker.brand_system.models import (
     AssetRegistration,
     BrandExample,
@@ -156,8 +156,83 @@ def test_complete_brand_bible_renders_every_canonical_content_kind_safely() -> N
     assert "Default, hover, focus, active, loading, and disabled." in page
     assert "Use unsupported superlatives &amp; hype." in page
     assert "/tmp/Northstar &amp; Co/logo.svg" in page
-    assert "No guidance has been added to this section yet." in page
+    # section.messaging is empty and editable, so its empty state links into the workshop.
+    assert 'href="/brand-systems/ea7d54dd-61f4-430e-a20e-eced89cddb37#section.messaging"' in page
+    assert "Add it in the workshop" in page
     assert "Print or save PDF" in page
+
+
+def _color(role: str, value: str) -> BrandToken:
+    return BrandToken(
+        id=f"token.color.{role}", name=f"{role} color", value_type="color", value=value
+    )
+
+
+def _draft_with_tokens(tokens: list[BrandToken]) -> WorkingDraft:
+    return WorkingDraft(
+        brand_id=UUID("ea7d54dd-61f4-430e-a20e-eced89cddb37"),
+        brand_name="Themed",
+        owner=LocalOwner(display_name="Owner"),
+        revision=1,
+        sections=[BrandSection(id="section.visual", title="Visual", status="draft", tokens=tokens)],
+    )
+
+
+def test_empty_locked_section_shows_no_workshop_link() -> None:
+    draft = _draft_with_tokens([])
+    draft.sections[0].locked = True
+    page = render_brand_bible(draft)
+
+    assert "No guidance has been added to this section yet." in page
+    assert "Add it in the workshop" not in page
+
+
+def test_brand_theme_maps_color_and_font_tokens_to_css_roles_by_keyword() -> None:
+    font = BrandToken(
+        id="token.font.display", name="Display", value_type="font", value="Georgia, serif"
+    )
+    tokens = [_color("ink", "#17201c"), _color("accent", "#a93624"), font]
+    style = _brand_theme(_draft_with_tokens(tokens))
+
+    expected = "<style>:root{--accent:#a93624;--ink:#17201c;--font-display:Georgia, serif}</style>"
+    assert style == expected
+
+
+def test_brand_theme_assigns_each_token_one_role_and_derives_neutrals_from_paper() -> None:
+    # Primary and Accent both match the --accent keywords; the earlier token wins it
+    # once (no collision), and defining a background derives surface + line too.
+    style = _brand_theme(
+        _draft_with_tokens(
+            [
+                _color("primary", "#997333"),
+                _color("secondary", "#524837"),
+                _color("accent", "#044843"),
+                _color("background", "#f5f5e3"),
+            ]
+        )
+    )
+
+    assert style.count("--accent:") == 1
+    assert "--accent:#997333" in style  # primary claims accent; no second assignment
+    assert "--paper:#f5f5e3" in style
+    assert "--muted:#524837" in style
+    assert "--surface:" in style and "--line:" in style  # derived from paper
+
+
+def test_brand_theme_rejects_unsafe_token_values_that_could_break_out_of_style() -> None:
+    style = _brand_theme(_draft_with_tokens([_color("ink", "red}</style><script>x")]))
+
+    assert style == ""
+
+
+def test_brand_theme_is_empty_when_no_token_names_match_a_role() -> None:
+    style = _brand_theme(
+        _draft_with_tokens(
+            [BrandToken(id="token.color.unnamed", name="Zzz", value_type="color", value="#000000")]
+        )
+    )
+
+    assert style == ""
 
 
 def test_brand_bible_route_reads_current_draft_and_workshop_links_to_it(

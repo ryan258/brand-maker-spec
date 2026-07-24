@@ -98,7 +98,7 @@ def _pattern(pattern: BrandPattern) -> str:
     )
 
 
-def _section(section: BrandSection, number: int) -> str:
+def _section(section: BrandSection, number: int, brand_id: object) -> str:
     parts = [
         f'<section class="bible-section" id="{escape(section.id)}" data-section-id="{escape(section.id)}" data-locked="{"1" if section.locked else "0"}">',
         '<div class="section-heading">',
@@ -140,9 +140,16 @@ def _section(section: BrandSection, number: int) -> str:
         or section.examples
         or section.patterns
     ):
-        parts.append(
-            '<p class="empty-guidance">No guidance has been added to this section yet.</p>'
-        )
+        if section.locked:
+            parts.append(
+                '<p class="empty-guidance">No guidance has been added to this section yet.</p>'
+            )
+        else:
+            parts.append(
+                '<p class="empty-guidance">No guidance yet. '
+                f'<a href="/brand-systems/{brand_id}#{escape(section.id)}">'
+                "Add it in the workshop</a> — write a paragraph or generate this section.</p>"
+            )
     parts.append("</section>")
     return "".join(parts)
 
@@ -186,14 +193,38 @@ def _map_roles(
     tokens: list[BrandToken],
     roles: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> dict[str, str]:
+    """One token per role and one role per token: greedy in role order, no reuse."""
+
     overrides: dict[str, str] = {}
+    used: set[str] = set()
     for var, keywords in roles:
         for token in tokens:
+            if token.id in used:
+                continue
             haystack = f"{token.id} {token.name}".lower()
             if any(word in haystack for word in keywords):
                 overrides[var] = str(token.value)
+                used.add(token.id)
                 break
     return overrides
+
+
+_DEFAULT_INK = (23, 32, 28)  # --ink from brand_bible_styles.py; the surface/line fallback base
+_WHITE = (255, 255, 255)
+
+
+def _parse_hex(value: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", value.strip())
+    if not match:
+        return None
+    digits = match.group(1)
+    if len(digits) == 3:
+        digits = "".join(c * 2 for c in digits)
+    return int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16)
+
+
+def _mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*(round(x + (y - x) * t) for x, y in zip(a, b, strict=True)))
 
 
 def _font_links(draft: WorkingDraft) -> str:
@@ -263,9 +294,18 @@ def _brand_theme(draft: WorkingDraft) -> str:
     overrides = _map_roles(colors, _COLOR_ROLES) | _map_roles(fonts, _FONT_ROLES)
     if not overrides:
         return ""
+    # Derive the neutral card/border roles from the brand's page color so the whole
+    # surface shifts, not only the three slots a brand usually names. Only when the
+    # brand redefined --paper (else the fixed theme's neutrals already agree).
+    paper = _parse_hex(overrides["--paper"]) if "--paper" in overrides else None
+    if paper:
+        ink = _parse_hex(overrides["--ink"]) if "--ink" in overrides else _DEFAULT_INK
+        overrides.setdefault("--surface", _mix(paper, _WHITE, 0.5))
+        overrides.setdefault("--line", _mix(paper, ink or _DEFAULT_INK, 0.30))
     body = ";".join(f"{var}:{value}" for var, value in overrides.items())
-    # ponytail: keyword heuristic on token id/name; swap for an explicit token->role
-    # mapping if brands start disagreeing with these guesses.
+    # ponytail: greedy keyword heuristic on token id/name; a brand color with no
+    # matching role word (e.g. a 2nd "accent" pop) simply has no slot in this
+    # 6-neutral+1-accent theme. Add an explicit token->role picker if that bites.
     return f"<style>:root{{{body}}}</style>"
 
 
@@ -284,7 +324,8 @@ def render_brand_bible(draft: WorkingDraft) -> str:
         for index, section in enumerate(draft.sections, start=1)
     )
     sections = "".join(
-        _section(section, index) for index, section in enumerate(draft.sections, start=1)
+        _section(section, index, draft.brand_id)
+        for index, section in enumerate(draft.sections, start=1)
     )
     if draft.assets:
         assets = (
