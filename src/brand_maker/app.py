@@ -1,14 +1,18 @@
 """FastAPI application factory and HTTP routes."""
 
+import io
 import json
 import logging
 import mimetypes
+import re
 import tempfile
+import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import Literal, cast
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import httpx
@@ -131,14 +135,19 @@ from brand_maker.openrouter import (
 from brand_maker.pipeline import BrandBuilder, BrandPipeline
 from brand_maker.publishing.archive import (
     MAX_ARCHIVE_BYTES,
+    MAX_ENTRIES,
+    MAX_ENTRY_BYTES,
     ArchiveContents,
     InvalidArchive,
     create_archive,
     import_archive,
 )
-from brand_maker.publishing.developer_exports import export_developer_package
+from brand_maker.publishing.developer_exports import (
+    export_developer_package,
+    export_draft_tokens,
+)
 from brand_maker.publishing.markdown import export_markdown
-from brand_maker.publishing.pdf import render_pdf
+from brand_maker.publishing.pdf import render_html_pdf, render_pdf
 from brand_maker.publishing.projections import Audience, project
 from brand_maker.publishing.web import render_projection
 from brand_maker.storage import SQLiteBrandRepository
@@ -159,6 +168,90 @@ BROWSER_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
+
+
+def _content_disposition(filename: str, prefix: str = "attachment") -> str:
+    ascii_filename = re.sub(r"[^\x20-\x7E]", "_", filename).replace('"', "_").strip()
+    if not ascii_filename:
+        ascii_filename = "export"
+    utf8_encoded = quote(filename)
+    return f"{prefix}; filename=\"{ascii_filename}\"; filename*=UTF-8''{utf8_encoded}"
+
+
+def _safe_zip_filename(name: str) -> str:
+    base = Path(name).name
+    cleaned = re.sub(r"[^a-zA-Z0-9_ .-]", "_", base).strip(". ")
+    return cleaned or "file"
+
+
+def _build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
+    token_exports = export_draft_tokens(draft)
+    html_content = render_brand_bible(draft, for_pdf=True)
+    pdf_bytes = render_html_pdf(html_content)
+    md_text = export_markdown(draft, version="draft", amendment_revision=0)
+
+    safe_brand = _safe_zip_filename(draft.brand_name)
+    buffer = io.BytesIO()
+    total_bytes = 0
+    seen_paths: set[str] = set()
+
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+
+        def _write_entry(path: str, data: bytes) -> None:
+            nonlocal total_bytes
+            total_bytes += len(data)
+            if total_bytes > MAX_ARCHIVE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Brand kit assets exceed maximum archive size limit of 250 MB.",
+                )
+            seen_paths.add(path)
+            zf.writestr(path, data)
+
+        _write_entry("tokens.css", token_exports["tokens.css"].encode("utf-8"))
+        _write_entry("tokens.json", token_exports["tokens.json"].encode("utf-8"))
+        _write_entry(
+            "tailwind.config.js",
+            token_exports["tailwind.config.js"].encode("utf-8"),
+        )
+        _write_entry(f"{safe_brand}-bible.md", md_text.encode("utf-8"))
+        _write_entry(f"{safe_brand}-bible.pdf", pdf_bytes)
+
+        if len(draft.assets) > MAX_ENTRIES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Brand kit contains too many asset entries (max {MAX_ENTRIES}).",
+            )
+
+        for asset in draft.assets:
+            if asset.size_bytes > MAX_ENTRY_BYTES:
+                if asset.required:
+                    detail = (
+                        f"Required asset '{asset.name}' exceeds maximum "
+                        "single file size of 25 MB."
+                    )
+                    raise HTTPException(status_code=413, detail=detail)
+                continue
+
+            try:
+                asset_bytes = asset_store.read(asset)
+                raw_safe = _safe_zip_filename(asset.name)
+                stem = Path(raw_safe).stem
+                ext = Path(raw_safe).suffix
+                entry_name = f"assets/{raw_safe}"
+                counter = 1
+                while entry_name in seen_paths:
+                    entry_name = f"assets/{stem}_{counter}{ext}"
+                    counter += 1
+                _write_entry(entry_name, asset_bytes)
+            except (AssetMissing, AssetChanged, ValueError) as exc:
+                if asset.required:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Required asset '{asset.name}' is missing or changed.",
+                    ) from exc
+
+    return buffer.getvalue()
 
 
 async def _append_asset(
@@ -298,9 +391,7 @@ def create_app(
         )
         app.state.campaign_service = CampaignService(app.state.compliance_repository)
         app.state.exception_ledger = ExceptionLedger(path=resolved_settings.database_path)
-        app.state.evidence_repository = SQLiteEvidenceRepository(
-            resolved_settings.database_path
-        )
+        app.state.evidence_repository = SQLiteEvidenceRepository(resolved_settings.database_path)
         app.state.generation_repository = SQLiteGenerationRepository(
             resolved_settings.database_path
         )
@@ -556,9 +647,7 @@ def create_app(
     ) -> ComplianceException:
         ledger = cast(ExceptionLedger, request.app.state.exception_ledger)
         try:
-            return await run_in_threadpool(
-                partial(ledger.approve, payload, owner_id="local-owner")
-            )
+            return await run_in_threadpool(partial(ledger.approve, payload, owner_id="local-owner"))
         except ValueError:
             raise HTTPException(
                 status_code=422, detail="Exception expiration must be in the future."
@@ -569,9 +658,7 @@ def create_app(
         response_model=ComplianceException,
         tags=["brand compliance"],
     )
-    async def get_compliance_exception(
-        exception_id: UUID, request: Request
-    ) -> ComplianceException:
+    async def get_compliance_exception(exception_id: UUID, request: Request) -> ComplianceException:
         ledger = cast(ExceptionLedger, request.app.state.exception_ledger)
         record = await run_in_threadpool(ledger.get, exception_id)
         if record is None:
@@ -592,9 +679,7 @@ def create_app(
                 partial(ledger.renew, exception_id, expires_at=payload.expires_at)
             )
         except KeyError:
-            raise HTTPException(
-                status_code=404, detail="Compliance exception not found."
-            ) from None
+            raise HTTPException(status_code=404, detail="Compliance exception not found.") from None
         except ValueError:
             raise HTTPException(
                 status_code=422, detail="Renewal must extend the expiration."
@@ -610,9 +695,7 @@ def create_app(
         payload: RegisterEvidenceRequest, request: Request
     ) -> RegisteredEvidence:
         evidence = cast(SQLiteEvidenceRepository, request.app.state.evidence_repository)
-        return await run_in_threadpool(
-            evidence.register, payload.artifact_id, payload.evidence
-        )
+        return await run_in_threadpool(evidence.register, payload.artifact_id, payload.evidence)
 
     @app.post(
         "/api/compliance/campaigns",
@@ -640,9 +723,7 @@ def create_app(
         response_model=CampaignResult,
         tags=["brand compliance"],
     )
-    async def get_compliance_campaign(
-        campaign_id: UUID, request: Request
-    ) -> CampaignResult:
+    async def get_compliance_campaign(campaign_id: UUID, request: Request) -> CampaignResult:
         campaigns = cast(CampaignService, request.app.state.campaign_service)
         result = await run_in_threadpool(campaigns.get, campaign_id)
         if result is None:
@@ -772,9 +853,7 @@ def create_app(
     async def register_brand_asset(
         brand_id: UUID, payload: RegisterAssetRequest, request: Request
     ) -> WorkingDraft:
-        workspaces = cast(
-            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
-        )
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
         assets = cast(AssetStore, request.app.state.asset_store)
         draft = await run_in_threadpool(workspaces.get, brand_id)
         if draft is None:
@@ -827,9 +906,7 @@ def create_app(
     ) -> WorkingDraft:
         """Store a browser-uploaded file as a content-addressed managed asset."""
 
-        workspaces = cast(
-            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
-        )
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
         assets = cast(AssetStore, request.app.state.asset_store)
         draft = await run_in_threadpool(workspaces.get, brand_id)
         if draft is None:
@@ -883,9 +960,7 @@ def create_app(
         client = cast("OpenRouterImageClient | None", request.app.state.image_client)
         if client is None:
             raise HTTPException(status_code=503, detail="Image generation is not configured.")
-        workspaces = cast(
-            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
-        )
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
         assets = cast(AssetStore, request.app.state.asset_store)
         settings = cast(Settings, request.app.state.settings)
         draft = await run_in_threadpool(workspaces.get, brand_id)
@@ -1225,17 +1300,13 @@ def create_app(
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid Content-Length.") from None
             if declared_size > MAX_ARCHIVE_BYTES:
-                raise HTTPException(
-                    status_code=413, detail="Archive exceeds the safety limit."
-                )
+                raise HTTPException(status_code=413, detail="Archive exceeds the safety limit.")
         observed = 0
         with tempfile.NamedTemporaryFile(suffix=".zip") as temporary:
             async for chunk in request.stream():
                 observed += len(chunk)
                 if observed > MAX_ARCHIVE_BYTES:
-                    raise HTTPException(
-                        status_code=413, detail="Archive exceeds the safety limit."
-                    )
+                    raise HTTPException(status_code=413, detail="Archive exceeds the safety limit.")
                 temporary.write(chunk)
             temporary.flush()
             settings_for_import = cast(Settings, request.app.state.settings)
@@ -1328,5 +1399,94 @@ def create_app(
             return await run_in_threadpool(operation, run_id)
         except GenerationRunNotFound:
             raise HTTPException(status_code=404, detail="Generation run not found.") from None
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/assets/{sha}",
+        tags=["living brand assets"],
+    )
+    async def get_brand_system_asset(brand_id: UUID, sha: str, request: Request) -> Response:
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        asset_store = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        asset = next(
+            (item for item in draft.assets if item.content_hash == sha or item.id == sha),
+            None,
+        )
+        if asset is None:
+            raise HTTPException(status_code=404, detail="Asset not found.")
+        try:
+            content = await run_in_threadpool(asset_store.read, asset)
+            return Response(content, media_type=asset.media_type)
+        except (AssetMissing, ValueError):
+            raise HTTPException(status_code=404, detail="Asset file missing or invalid.") from None
+        except AssetChanged:
+            raise HTTPException(status_code=409, detail="Asset file integrity breach.") from None
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/draft-exports/{format_name}",
+        tags=["living brand exports"],
+    )
+    async def export_draft_brand_system(
+        brand_id: UUID,
+        format_name: Literal["pdf", "markdown", "tokens-css", "tokens-json", "tailwind", "kit"],
+        request: Request,
+    ) -> Response:
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        asset_store = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+
+        if format_name == "markdown":
+            body = export_markdown(draft, version="draft", amendment_revision=0)
+            return Response(
+                body,
+                media_type="text/markdown",
+                headers={
+                    "Content-Disposition": _content_disposition(f"{draft.brand_name}-bible.md")
+                },
+            )
+
+        if format_name in {"tokens-css", "tokens-json", "tailwind"}:
+            token_exports = export_draft_tokens(draft)
+            if format_name == "tokens-css":
+                return Response(
+                    token_exports["tokens.css"],
+                    media_type="text/css",
+                    headers={"Content-Disposition": _content_disposition("tokens.css")},
+                )
+            if format_name == "tokens-json":
+                return Response(
+                    token_exports["tokens.json"],
+                    media_type="application/json",
+                    headers={"Content-Disposition": _content_disposition("tokens.json")},
+                )
+            return Response(
+                token_exports["tailwind.config.js"],
+                media_type="application/javascript",
+                headers={"Content-Disposition": _content_disposition("tailwind.config.js")},
+            )
+
+        if format_name == "pdf":
+            html_content = render_brand_bible(draft, for_pdf=True)
+            pdf_bytes = await run_in_threadpool(render_html_pdf, html_content)
+            return Response(
+                pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": _content_disposition(f"{draft.brand_name}-bible.pdf")
+                },
+            )
+
+        zip_bytes = await run_in_threadpool(_build_brand_kit_zip, draft, asset_store)
+        return Response(
+            zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": _content_disposition(f"{draft.brand_name}-brand-kit.zip")
+            },
+        )
 
     return app

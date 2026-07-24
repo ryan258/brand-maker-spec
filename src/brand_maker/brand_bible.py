@@ -7,6 +7,7 @@
 import re
 from html import escape
 
+from brand_maker.brand_bible_styles import BRAND_BIBLE_CSS
 from brand_maker.brand_system.models import (
     AssetRegistration,
     BrandExample,
@@ -128,17 +129,12 @@ def _section(section: BrandSection, number: int, brand_id: object) -> str:
         parts.append("</ul></div>")
     if section.patterns:
         parts.append(
-            '<div class="content-group"><h3>Patterns &amp; playbooks</h3>'
-            '<div class="pattern-list">'
+            '<div class="content-group"><h3>Patterns &amp; playbooks</h3><div class="pattern-list">'
         )
         parts.extend(_pattern(pattern) for pattern in section.patterns)
         parts.append("</div></div>")
     if not (
-        section.blocks
-        or section.rules
-        or section.tokens
-        or section.examples
-        or section.patterns
+        section.blocks or section.rules or section.tokens or section.examples or section.patterns
     ):
         if section.locked:
             parts.append(
@@ -183,9 +179,7 @@ _FONT_ROLES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Trust boundary: token values are model/user-authored and land inside <style>,
 # where HTML-escaping can't stop a raw "</style>" breakout. Allow only well-formed
 # colors / font stacks (font names carry spaces, commas, quotes — but never < > { } ; ).
-_SAFE_COLOR = re.compile(
-    r"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20}|(rgb|hsl)a?\([0-9.,%\s/deg]+\))$"
-)
+_SAFE_COLOR = re.compile(r"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20}|(rgb|hsl)a?\([0-9.,%\s/deg]+\))$")
 _SAFE_FONT = re.compile(r"^[-\w\s,'\".]{1,120}$")
 
 
@@ -224,7 +218,9 @@ def _parse_hex(value: str) -> tuple[int, int, int] | None:
 
 
 def _mix(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> str:
-    return "#{:02x}{:02x}{:02x}".format(*(round(x + (y - x) * t) for x, y in zip(a, b, strict=True)))
+    return "#{:02x}{:02x}{:02x}".format(
+        *(round(x + (y - x) * t) for x, y in zip(a, b, strict=True))
+    )
 
 
 def _font_links(draft: WorkingDraft) -> str:
@@ -262,7 +258,7 @@ def _font_options(current: str) -> str:
     for generic, label in labels:
         options = "".join(
             f'<option value="{escape(font_stack(name))}"'
-            f'{" selected" if font_stack(name) == current else ""}>{escape(name)}</option>'
+            f"{' selected' if font_stack(name) == current else ''}>{escape(name)}</option>"
             for name, family_generic in GOOGLE_FONTS
             if family_generic == generic
         )
@@ -309,7 +305,7 @@ def _brand_theme(draft: WorkingDraft) -> str:
     return f"<style>:root{{{body}}}</style>"
 
 
-def render_brand_bible(draft: WorkingDraft) -> str:
+def render_brand_bible(draft: WorkingDraft, *, for_pdf: bool = False) -> str:
     """Render every canonical draft content type without trusting stored text as markup."""
 
     complete = sum(section.status in {"reviewed", "approved"} for section in draft.sections)
@@ -343,9 +339,31 @@ def render_brand_bible(draft: WorkingDraft) -> str:
         assets = (
             '<section class="bible-section" id="assets"><div class="section-heading">'
             '<p class="section-number">A</p><div><h2>Asset registry</h2></div></div>'
-            '<p class="empty-guidance">No production assets yet. '
-            f'<a href="/brand-systems/{draft.brand_id}">Upload logos and fonts in the workshop</a>.</p>'
+            '<p class="empty-guidance">No production assets yet.</p>'
             "</section>"
         )
 
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/brand-bible.css">{_font_links(draft)}{_brand_theme(draft)}<script src="/assets/workshop.js" defer></script><title>{escape(draft.brand_name)} — complete brand bible</title></head><body data-page="bible" data-brand-id="{draft.brand_id}">{HEADER}<main id="main-content"><section class="bible-cover" aria-labelledby="bible-title"><p class="eyebrow">Complete living brand bible</p><h1 id="bible-title">{escape(draft.brand_name)}</h1><p class="cover-deck">A single source of truth for how the brand thinks, speaks, looks, behaves, and stays coherent.</p><div class="cover-actions"><a class="action-link" href="/brand-systems/{draft.brand_id}">Edit workspace</a><button id="edit-bible" type="button" aria-pressed="false">Edit in place</button><button id="print-bible" type="button">Print or save PDF</button></div><p id="edit-status" class="edit-status" role="status" aria-live="polite"></p>{_font_picker(draft)}<dl class="brand-meta"><div><dt>Owner</dt><dd>{escape(draft.owner.display_name)}</dd></div><div><dt>Draft revision</dt><dd>{draft.revision}</dd></div><div><dt>System status</dt><dd>{escape(draft.status)}</dd></div><div><dt>Reviewed sections</dt><dd>{complete} of {len(draft.sections)}</dd></div><div><dt>Schema</dt><dd>{escape(draft.schema_version)}</dd></div></dl></section><section class="context-panel" aria-labelledby="context-title"><p class="eyebrow">Founding context</p><h2 id="context-title">What this brand needs to hold</h2>{context}</section><div class="bible-layout"><nav class="bible-nav" aria-label="Brand bible contents"><p class="nav-title">Contents</p><ol>{navigation}<li><a href="#assets"><span>A</span> Asset registry</a></li></ol></nav><article class="bible-content">{sections}{assets}</article></div></main><footer><p>{escape(draft.brand_name)} · Living draft revision {draft.revision} · Canonical ID {draft.brand_id}</p></footer></body></html>'''
+    css_block = f"<style>{BRAND_BIBLE_CSS}</style>"
+    if for_pdf:
+        pdf_style = (
+            "<style>"
+            "@page { size: letter; margin: 0.7in 0.7in 0.75in; @bottom-right { content: 'Page ' counter(page) ' of ' counter(pages); color: #526058; font-size: 9pt; } }"
+            "header, .cover-actions, .edit-status, .font-picker, script { display: none !important; }"
+            "</style>"
+        )
+        return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">{css_block}{pdf_style}{_font_links(draft)}{_brand_theme(draft)}<title>{escape(draft.brand_name)} — complete brand bible</title></head><body data-page="bible" data-brand-id="{draft.brand_id}"><main id="main-content"><section class="bible-cover" aria-labelledby="bible-title"><p class="eyebrow">Complete living brand bible</p><h1 id="bible-title">{escape(draft.brand_name)}</h1><p class="cover-deck">A single source of truth for how the brand thinks, speaks, looks, behaves, and stays coherent.</p><dl class="brand-meta"><div><dt>Owner</dt><dd>{escape(draft.owner.display_name)}</dd></div><div><dt>Draft revision</dt><dd>{draft.revision}</dd></div><div><dt>System status</dt><dd>{escape(draft.status)}</dd></div><div><dt>Reviewed sections</dt><dd>{complete} of {len(draft.sections)}</dd></div><div><dt>Schema</dt><dd>{escape(draft.schema_version)}</dd></div></dl></section><section class="context-panel" aria-labelledby="context-title"><p class="eyebrow">Founding context</p><h2 id="context-title">What this brand needs to hold</h2>{context}</section><div class="bible-layout"><nav class="bible-nav" aria-label="Brand bible contents"><p class="nav-title">Contents</p><ol>{navigation}<li><a href="#assets"><span>A</span> Asset registry</a></li></ol></nav><article class="bible-content">{sections}{assets}</article></div></main><footer><p>{escape(draft.brand_name)} · Living draft revision {draft.revision} · Canonical ID {draft.brand_id}</p></footer></body></html>'''
+
+    export_menu = (
+        f'<div class="export-dropdown" style="display:inline-block;position:relative;">'
+        f'<button id="export-menu-btn" type="button">Export ▾</button>'
+        f'<div id="export-menu" hidden style="position:absolute;right:0;top:100%;background:var(--surface,#fff);border:1px solid var(--line,#ccc);padding:0.5rem;z-index:100;min-width:180px;box-shadow:0 4px 12px rgba(0,0,0,0.15);border-radius:4px;">'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/pdf" download="{escape(draft.brand_name)}-bible.pdf">📄 PDF Document</a>'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/markdown" download="{escape(draft.brand_name)}-bible.md">📝 Markdown</a>'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/tokens-css" download="tokens.css">🎨 CSS Custom Properties</a>'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/tokens-json" download="tokens.json">🔣 JSON Tokens</a>'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/tailwind" download="tailwind.config.js">💨 Tailwind Config</a>'
+        f'<a class="action-link" style="display:block;margin:0.25rem 0;" href="/api/brand-systems/{draft.brand_id}/draft-exports/kit" download="{escape(draft.brand_name)}-brand-kit.zip">📦 Brand Kit (.zip)</a>'
+        f"</div></div>"
+    )
+
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/brand-bible.css">{css_block}{_font_links(draft)}{_brand_theme(draft)}<script src="/assets/workshop.js" defer></script><title>{escape(draft.brand_name)} — complete brand bible</title></head><body data-page="bible" data-brand-id="{draft.brand_id}">{HEADER}<main id="main-content"><section class="bible-cover" aria-labelledby="bible-title"><p class="eyebrow">Complete living brand bible</p><h1 id="bible-title">{escape(draft.brand_name)}</h1><p class="cover-deck">A single source of truth for how the brand thinks, speaks, looks, behaves, and stays coherent.</p><div class="cover-actions"><a class="action-link" href="/brand-systems/{draft.brand_id}">Edit workspace</a><button id="edit-bible" type="button" aria-pressed="false">Edit in place</button><button id="print-bible" type="button">Print or save PDF</button>{export_menu}</div><p id="edit-status" class="edit-status" role="status" aria-live="polite"></p>{_font_picker(draft)}<dl class="brand-meta"><div><dt>Owner</dt><dd>{escape(draft.owner.display_name)}</dd></div><div><dt>Draft revision</dt><dd>{draft.revision}</dd></div><div><dt>System status</dt><dd>{escape(draft.status)}</dd></div><div><dt>Reviewed sections</dt><dd>{complete} of {len(draft.sections)}</dd></div><div><dt>Schema</dt><dd>{escape(draft.schema_version)}</dd></div></dl></section><section class="context-panel" aria-labelledby="context-title"><p class="eyebrow">Founding context</p><h2 id="context-title">What this brand needs to hold</h2>{context}</section><div class="bible-layout"><nav class="bible-nav" aria-label="Brand bible contents"><p class="nav-title">Contents</p><ol>{navigation}<li><a href="#assets"><span>A</span> Asset registry</a></li></ol></nav><article class="bible-content">{sections}{assets}</article></div></main><footer><p>{escape(draft.brand_name)} · Living draft revision {draft.revision} · Canonical ID {draft.brand_id}</p></footer></body></html>'''
