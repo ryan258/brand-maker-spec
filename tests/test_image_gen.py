@@ -60,6 +60,34 @@ async def test_generate_rejects_undecodable_image_data() -> None:
             await client.generate(prompt="x", model="img/model")
 
 
+@pytest.mark.asyncio
+async def test_generate_sends_reference_image_as_bounded_data_url() -> None:
+    observed: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"data": [{"b64_json": base64.b64encode(_PNG).decode()}]},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = OpenRouterImageClient(http=http, api_key="secret")
+        await client.generate(
+            prompt="make an icon-only variant",
+            model="img/model",
+            reference=(_PNG, "image/png"),
+            aspect_ratio="1:1",
+            background="transparent",
+        )
+
+    reference = observed["input_references"][0]  # type: ignore[index]
+    assert reference["type"] == "image_url"  # type: ignore[index]
+    assert str(reference["image_url"]["url"]).startswith("data:image/png;base64,")  # type: ignore[index]
+    assert observed["aspect_ratio"] == "1:1"
+    assert observed["background"] == "transparent"
+
+
 def test_logo_prompt_uses_brand_name_context_and_color_tokens() -> None:
     draft = WorkingDraft(
         brand_id=UUID("ea7d54dd-61f4-430e-a20e-eced89cddb37"),

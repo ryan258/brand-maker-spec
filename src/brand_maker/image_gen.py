@@ -37,10 +37,33 @@ class OpenRouterImageClient:
         self._http = http
         self._api_key = api_key
 
-    async def generate(self, *, prompt: str, model: str) -> tuple[bytes, str]:
+    async def generate(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        reference: tuple[bytes, str] | None = None,
+        aspect_ratio: str | None = None,
+        background: str | None = None,
+    ) -> tuple[bytes, str]:
         """Return (image_bytes, media_type) for one generated image."""
 
         payload = {"model": model, "prompt": prompt, "output_format": "png"}
+        if reference is not None:
+            reference_bytes, reference_media_type = reference
+            encoded = base64.b64encode(reference_bytes).decode("ascii")
+            payload["input_references"] = [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{reference_media_type};base64,{encoded}",
+                    },
+                }
+            ]
+        if aspect_ratio is not None:
+            payload["aspect_ratio"] = aspect_ratio
+        if background is not None:
+            payload["background"] = background
         try:
             async with self._http.stream(
                 "POST",
