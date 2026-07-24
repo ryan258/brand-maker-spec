@@ -158,6 +158,7 @@ class WorkingDraft(ContractModel):
     brand_id: UUID
     source_brand_id: UUID | None = None
     brand_name: ShortText
+    brand_context: NarrativeText | None = None
     owner: LocalOwner
     revision: int = Field(..., ge=1)
     status: Literal["draft", "reviewed", "approved"] = "draft"
@@ -244,6 +245,7 @@ class CreateWorkspaceRequest(ContractModel):
     """Create a blank workspace or migrate one immutable legacy kit."""
 
     brand_name: ShortText | None = None
+    brand_context: NarrativeText | None = None
     owner_name: ShortText
     source_brand_id: UUID | None = None
 

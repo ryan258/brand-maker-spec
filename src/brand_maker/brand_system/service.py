@@ -145,6 +145,7 @@ class BrandSystemService:
             brand_id=self._id_factory(),
             source_brand_id=request.source_brand_id,
             brand_name=brand_name,
+            brand_context=request.brand_context,
             owner=LocalOwner(display_name=request.owner_name),
             revision=1,
             sections=_migrated_sections(source) if source is not None else _blank_sections(),

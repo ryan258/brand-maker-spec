@@ -67,6 +67,54 @@ def test_create_list_and_get_local_workspace(tmp_path: Path) -> None:
     assert listing.json()["items"][0]["brand_id"] == brand_id
 
 
+def test_workspace_preserves_optional_long_form_brand_context(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+    context = (
+        "We serve independent neighborhood bookstores.\n\n"
+        "The brand should feel literate and warm without becoming nostalgic."
+    )
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={
+                "brand_name": "Northstar Studio",
+                "brand_context": f"  {context}  ",
+                "owner_name": "Ryan",
+            },
+        )
+        fetched = api.get(f"/api/brand-systems/{created.json()['brand_id']}")
+
+    assert created.status_code == 201
+    assert created.json()["brand_context"] == context
+    assert fetched.json()["brand_context"] == context
+
+
+def test_workspace_rejects_whitespace_only_or_oversized_context(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        whitespace = api.post(
+            "/api/brand-systems",
+            json={
+                "brand_name": "Northstar",
+                "brand_context": "   ",
+                "owner_name": "Ryan",
+            },
+        )
+        oversized = api.post(
+            "/api/brand-systems",
+            json={
+                "brand_name": "Northstar",
+                "brand_context": "x" * 50_001,
+                "owner_name": "Ryan",
+            },
+        )
+
+    assert whitespace.status_code == 422
+    assert oversized.status_code == 422
+
+
 def test_migration_preserves_source_and_marks_missing_sections_incomplete(
     tmp_path: Path,
 ) -> None:
