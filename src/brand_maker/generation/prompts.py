@@ -21,10 +21,12 @@ def section_messages(
     definition: SectionDefinition,
     brand_name: str,
     accepted_context: Mapping[str, object],
+    brand_context: str | None = None,
 ) -> list[dict[str, str]]:
     payload = {
         "prompt_version": PROMPT_VERSION,
         "brand_name": brand_name,
+        "brand_context": brand_context,
         "section_id": definition.id,
         "section_title": definition.title,
         "section_purpose": definition.purpose,

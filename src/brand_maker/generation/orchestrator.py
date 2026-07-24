@@ -130,6 +130,7 @@ class GenerationOrchestrator:
                         messages=section_messages(
                             definition=definition,
                             brand_name=draft.brand_name,
+                            brand_context=draft.brand_context,
                             accepted_context={
                                 section.id: section.status for section in draft.sections
                             },

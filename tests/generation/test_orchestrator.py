@@ -14,9 +14,11 @@ from brand_maker.openrouter import ModelUnavailable
 class GoodCompleter:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.requests: list[dict[str, object]] = []
 
     async def complete(self, *, messages, model, temperature, max_tokens) -> str:
         request = json.loads(messages[1]["content"])
+        self.requests.append(request)
         section_id = request["section_id"]
         self.calls.append(section_id)
         return json.dumps(
@@ -58,6 +60,7 @@ def workspace(path: Path) -> tuple[SQLiteBrandSystemRepository, WorkingDraft]:
     draft = WorkingDraft(
         brand_id=UUID("d795ebf9-8f54-44a2-85cd-e73faacb7008"),
         brand_name="Northstar",
+        brand_context="Independent bookstores serving curious local readers.",
         owner=LocalOwner(display_name="Ryan"),
         revision=1,
         sections=[BrandSection(id=item.id, title=item.title) for item in SECTION_CATALOG.values()],
@@ -79,6 +82,11 @@ async def test_complete_run_persists_every_section_and_finishes(tmp_path: Path) 
     assert completed.status == "completed"
     assert completed.cursor == len(SECTION_CATALOG)
     assert completer.calls == list(SECTION_CATALOG)
+    assert all(
+        request["brand_context"]
+        == "Independent bookstores serving curious local readers."
+        for request in completer.requests
+    )
     assert stored is not None
     assert stored.revision == 1 + len(SECTION_CATALOG)
     assert all(section.status == "draft" for section in stored.sections)
