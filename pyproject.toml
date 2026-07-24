@@ -13,6 +13,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
+  "python-multipart>=0.0.9,<1",
   "uvicorn[standard]>=0.35,<1",
   "weasyprint>=69,<70",
 ]
@@ -43,6 +44,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers are call-in-default by design; File isn't in ruff's default allowlist.
+extend-immutable-calls = ["fastapi.File"]
 
 [tool.mypy]
 python_version = "3.11"

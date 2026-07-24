@@ -34,6 +34,7 @@ class AssetStore:
     def __init__(self, root: Path, *, max_bytes: int = 25_000_000) -> None:
         self._root = root
         self._max_bytes = max_bytes
+        self.max_bytes = max_bytes  # public: upload routes cap streaming before hashing
 
     def _inspect(self, source: Path, media_type: str) -> tuple[int, str]:
         if media_type not in ALLOWED_MEDIA_TYPES:

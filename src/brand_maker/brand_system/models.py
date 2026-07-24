@@ -190,6 +190,12 @@ class RegisterAssetRequest(ContractModel):
     required: bool = True
 
 
+class GenerateLogoRequest(ContractModel):
+    expected_revision: int = Field(..., ge=1)
+    instructions: str = Field(default="", max_length=2000)
+    name: str | None = Field(default=None, min_length=1, max_length=300)
+
+
 SectionStatus = Literal["incomplete", "draft", "reviewed", "approved"]
 
 

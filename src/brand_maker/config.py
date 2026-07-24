@@ -37,6 +37,12 @@ class Settings(BaseSettings):
         min_length=1,
         validation_alias="BRAND_MAKER_JUDGE_MODEL",
     )
+    image_model: str = Field(
+        "google/gemini-2.5-flash-image-preview",
+        min_length=1,
+        validation_alias="BRAND_MAKER_IMAGE_MODEL",
+        description="OpenRouter image model used for logo generation.",
+    )
     request_timeout_seconds: float = Field(
         45.0,
         gt=0,

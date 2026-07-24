@@ -2,16 +2,17 @@
 
 import json
 import logging
+import mimetypes
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import Literal, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.openapi.docs import (
     get_redoc_html,
     get_swagger_ui_html,
@@ -34,8 +35,10 @@ from brand_maker.brand_system.models import (
     AmendmentRequest,
     ApprovalRecord,
     ApprovalRequest,
+    AssetRegistration,
     CreateWorkspaceRequest,
     EditImpact,
+    GenerateLogoRequest,
     PublicationAmendment,
     PublicationRequest,
     PublishedVersion,
@@ -100,6 +103,7 @@ from brand_maker.generation.repository import (
     SQLiteGenerationRepository,
     StartGenerationRequest,
 )
+from brand_maker.image_gen import OpenRouterImageClient, logo_prompt
 from brand_maker.library_styles import LIBRARY_CSS
 from brand_maker.library_ui import LIBRARY_SCRIPT
 from brand_maker.library_web import detail_page, library_page, not_found_page
@@ -110,7 +114,12 @@ from brand_maker.models import (
     SavedBrandGeneration,
     SavedBrandPage,
 )
-from brand_maker.openrouter import OpenRouterClient
+from brand_maker.openrouter import (
+    ModelUnavailable,
+    OpenRouterClient,
+    ProviderError,
+    ProviderRefusal,
+)
 from brand_maker.pipeline import BrandBuilder, BrandPipeline
 from brand_maker.publishing.archive import (
     MAX_ARCHIVE_BYTES,
@@ -144,6 +153,29 @@ BROWSER_HEADERS = {
 }
 
 
+async def _append_asset(
+    workspaces: SQLiteBrandSystemRepository,
+    draft: WorkingDraft,
+    registration: AssetRegistration,
+) -> WorkingDraft:
+    """Append one registered asset to the draft and persist the next revision."""
+
+    data = draft.model_dump(mode="json")
+    data.update(
+        {
+            "assets": [
+                *[item.model_dump(mode="json") for item in draft.assets],
+                registration.model_dump(mode="json"),
+            ],
+            "revision": draft.revision + 1,
+        }
+    )
+    updated = WorkingDraft.model_validate(data)
+    return await run_in_threadpool(
+        partial(workspaces.update, updated, expected_revision=draft.revision)
+    )
+
+
 def create_app(
     *,
     settings: Settings | None = None,
@@ -151,6 +183,7 @@ def create_app(
     repository: SQLiteBrandRepository | None = None,
     brand_system_repository: SQLiteBrandSystemRepository | None = None,
     generation_completer: Completer | None = None,
+    image_client: OpenRouterImageClient | None = None,
 ) -> FastAPI:
     """Create an application whose resources are owned by its lifespan."""
 
@@ -175,6 +208,7 @@ def create_app(
         )
         app.state.amendment_repository = SQLiteAmendmentRepository(resolved_settings.database_path)
         app.state.asset_store = AssetStore(resolved_settings.database_path.parent / "assets")
+        app.state.image_client = image_client
         app.state.compliance_repository = SQLiteComplianceRepository(
             resolved_settings.database_path
         )
@@ -200,9 +234,10 @@ def create_app(
         timeout = httpx.Timeout(resolved_settings.request_timeout_seconds)
         limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
         async with httpx.AsyncClient(timeout=timeout, limits=limits) as http:
-            generator = OpenRouterClient(
-                http=http,
-                api_key=resolved_settings.openrouter_api_key.get_secret_value(),
+            api_key = resolved_settings.openrouter_api_key.get_secret_value()
+            generator = OpenRouterClient(http=http, api_key=api_key)
+            app.state.image_client = image_client or OpenRouterImageClient(
+                http=http, api_key=api_key
             )
             app.state.generation_completer = generator
             app.state.pipeline = BrandPipeline(
@@ -684,26 +719,131 @@ def create_app(
                         required=payload.required,
                     )
                 )
-            data = draft.model_dump(mode="json")
-            data.update(
-                {
-                    "assets": [
-                        *[item.model_dump(mode="json") for item in draft.assets],
-                        registration.model_dump(mode="json"),
-                    ],
-                    "revision": draft.revision + 1,
-                }
-            )
-            updated = WorkingDraft.model_validate(data)
-            return await run_in_threadpool(
-                partial(
-                    workspaces.update, updated, expected_revision=draft.revision
-                )
-            )
+            return await _append_asset(workspaces, draft, registration)
         except StaleDraftRevision:
             raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
         except (AssetMissing, AssetChanged, ValueError):
             raise HTTPException(status_code=422, detail="Asset registration is invalid.") from None
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/asset-uploads",
+        response_model=WorkingDraft,
+        status_code=201,
+        tags=["living brand systems"],
+    )
+    async def upload_brand_asset(
+        brand_id: UUID,
+        request: Request,
+        expected_revision: int = Form(..., ge=1),
+        name: str = Form(..., min_length=1, max_length=300),
+        file: UploadFile = File(...),
+        required: bool = Form(True),
+    ) -> WorkingDraft:
+        """Store a browser-uploaded file as a content-addressed managed asset."""
+
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        assets = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        if draft.revision != expected_revision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.")
+        media_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
+        # Stream to a temp file so the store can hash + copy it; cap before we fill disk.
+        with tempfile.NamedTemporaryFile(delete=False) as buffer:
+            temporary = Path(buffer.name)
+            written = 0
+            while chunk := await file.read(64 * 1024):
+                written += len(chunk)
+                if written > assets.max_bytes:
+                    buffer.close()
+                    temporary.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="Uploaded file is too large.")
+                buffer.write(chunk)
+        try:
+            registration = await run_in_threadpool(
+                partial(
+                    assets.import_managed,
+                    asset_id=f"asset.upload.{uuid4().hex}",
+                    name=name,
+                    source=temporary,
+                    media_type=media_type,
+                    required=required,
+                )
+            )
+            return await _append_asset(workspaces, draft, registration)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(
+                status_code=422, detail="Uploaded file is not an accepted asset type."
+            ) from None
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/logo-generations",
+        response_model=WorkingDraft,
+        status_code=201,
+        tags=["living brand systems"],
+    )
+    async def generate_brand_logo(
+        brand_id: UUID, payload: GenerateLogoRequest, request: Request
+    ) -> WorkingDraft:
+        """Generate a logo from the brand's own tokens and store it as a managed asset."""
+
+        client = cast("OpenRouterImageClient | None", request.app.state.image_client)
+        if client is None:
+            raise HTTPException(status_code=503, detail="Image generation is not configured.")
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        assets = cast(AssetStore, request.app.state.asset_store)
+        settings = cast(Settings, request.app.state.settings)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        if draft.revision != payload.expected_revision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.")
+        try:
+            image_bytes, media_type = await client.generate(
+                prompt=logo_prompt(draft, payload.instructions), model=settings.image_model
+            )
+        except ProviderRefusal:
+            raise HTTPException(
+                status_code=422, detail="The image model declined this request."
+            ) from None
+        except ModelUnavailable:
+            raise HTTPException(
+                status_code=503, detail="The image model is temporarily unavailable."
+            ) from None
+        except ProviderError:
+            raise HTTPException(status_code=502, detail="Logo generation failed.") from None
+        with tempfile.NamedTemporaryFile(delete=False) as buffer:
+            temporary = Path(buffer.name)
+            buffer.write(image_bytes)
+        try:
+            registration = await run_in_threadpool(
+                partial(
+                    assets.import_managed,
+                    asset_id=f"asset.logo.{uuid4().hex}",
+                    name=payload.name or f"{draft.brand_name} logo",
+                    source=temporary,
+                    media_type=media_type,
+                    required=False,
+                )
+            )
+            return await _append_asset(workspaces, draft, registration)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(
+                status_code=502, detail="The generated image was not a usable asset."
+            ) from None
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @app.post(
         "/api/brand-systems/{brand_id}/approvals",
