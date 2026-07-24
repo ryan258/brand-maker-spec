@@ -27,9 +27,7 @@ def test_create_icon_set_returns_square_pngs_at_production_sizes() -> None:
         "app-icon-192",
         "app-icon-512",
     ]
-    for item, expected_size in zip(
-        derivatives, (16, 32, 48, 180, 192, 512), strict=True
-    ):
+    for item, expected_size in zip(derivatives, (16, 32, 48, 180, 192, 512), strict=True):
         rendered = Image.open(BytesIO(item.content))
         assert rendered.size == (expected_size, expected_size)
         assert rendered.mode == "RGBA"

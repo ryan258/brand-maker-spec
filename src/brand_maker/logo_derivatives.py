@@ -109,9 +109,7 @@ def vectorize_logo(content: bytes, media_type: str) -> LogoDerivative:
         raise ValueError("raster logo has no traceable paths")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {image.width} {image.height}" role="img">'
-        + "".join(paths)
-        + "</svg>"
+        f'viewBox="0 0 {image.width} {image.height}" role="img">' + "".join(paths) + "</svg>"
     )
     return LogoDerivative("vector", svg.encode("utf-8"), "image/svg+xml")
 
@@ -162,9 +160,7 @@ def _simplify_loop(points: list[Point]) -> list[Point]:
     for index, point in enumerate(closed):
         previous = closed[index - 1]
         following = closed[(index + 1) % len(closed)]
-        if (previous[0] == point[0] == following[0]) or (
-            previous[1] == point[1] == following[1]
-        ):
+        if (previous[0] == point[0] == following[0]) or (previous[1] == point[1] == following[1]):
             continue
         simplified.append(point)
     return [*simplified, simplified[0]] if simplified else points
