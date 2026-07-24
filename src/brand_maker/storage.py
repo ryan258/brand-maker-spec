@@ -36,6 +36,8 @@ class SQLiteBrandRepository:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self._path, timeout=5.0)
+        # ponytail: connect + schema-check per query; fine for local single-user.
+        # If load grows, keep a persistent connection and move to schema-once + PRAGMA WAL.
         try:
             connection.execute(SCHEMA)
             yield connection
