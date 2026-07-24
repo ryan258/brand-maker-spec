@@ -39,6 +39,9 @@ def test_workshop_index_has_accessible_creation_and_workspace_regions(
     assert response.text.count("<h1") == 1
     assert '<form id="workspace-form"' in response.text
     assert '<label for="workspace-name">' in response.text
+    assert '<textarea id="brand-context"' in response.text
+    assert 'for="brand-context">Brand context' in response.text
+    assert 'aria-describedby="brand-context-help"' in response.text
     assert 'id="workspace-status" role="status" aria-live="polite"' in response.text
     assert 'id="workspace-list" aria-busy="true"' in response.text
     assert 'src="/assets/workshop.js"' in response.text
