@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import stat
 import tempfile
 from pathlib import Path
 
@@ -120,10 +121,29 @@ class AssetStore:
             source = Path(asset.source_path)
         else:
             raise AssetMissing(asset.id)
-        size, content_hash = self._inspect(source, asset.media_type)
-        if size != asset.size_bytes or content_hash != asset.content_hash:
+        if asset.media_type not in ALLOWED_MEDIA_TYPES:
+            raise ValueError("unsupported media type")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(source, flags)
+        except FileNotFoundError as exc:
+            raise AssetMissing(asset.id) from exc
+        except OSError as exc:
+            raise ValueError("asset source could not be opened safely") from exc
+
+        digest = hashlib.sha256()
+        content = bytearray()
+        with os.fdopen(descriptor, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise AssetMissing(asset.id)
+            while chunk := handle.read(64 * 1024):
+                content.extend(chunk)
+                if len(content) > self._max_bytes:
+                    raise ValueError("asset exceeds the safety limit")
+                digest.update(chunk)
+        if len(content) != asset.size_bytes or digest.hexdigest() != asset.content_hash:
             raise AssetChanged(asset.id)
-        return source.read_bytes()
+        return bytes(content)
 
     def prepare_publication(self, draft: WorkingDraft) -> WorkingDraft:
         assets: list[AssetRegistration] = []

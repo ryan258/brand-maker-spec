@@ -89,6 +89,30 @@ def test_missing_or_changed_required_link_blocks_publication(tmp_path: Path) -> 
         store.prepare_publication(working)
 
 
+def test_asset_read_returns_only_the_bytes_it_hashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "logo.png"
+    source.write_bytes(b"registered logo")
+    store = AssetStore(tmp_path / "managed")
+    linked = store.register_linked(
+        asset_id="asset.logo.primary",
+        name="Primary logo",
+        source=source,
+        media_type="image/png",
+        required=False,
+    )
+    original_read_bytes = Path.read_bytes
+
+    def replace_after_integrity_check(path: Path) -> bytes:
+        source.write_bytes(b"changed after integrity check")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", replace_after_integrity_check)
+
+    assert store.read(linked) == b"registered logo"
+
+
 def test_asset_import_rejects_symlinks_unsupported_types_and_large_files(
     tmp_path: Path,
 ) -> None:

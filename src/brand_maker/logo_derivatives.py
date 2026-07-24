@@ -35,7 +35,7 @@ def _decode_raster(content: bytes, media_type: str) -> Image.Image:
             source.seek(0)
             image = ImageOps.exif_transpose(source).convert("RGBA")
             image.load()
-    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ValueError("could not decode the raster logo") from exc
     return image
 
