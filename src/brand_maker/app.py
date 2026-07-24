@@ -36,9 +36,11 @@ from brand_maker.brand_system.models import (
     ApprovalRecord,
     ApprovalRequest,
     AssetRegistration,
+    CreateAssetDerivativeRequest,
     CreateWorkspaceRequest,
     EditImpact,
     GenerateLogoRequest,
+    GenerateLogoVariantsRequest,
     PublicationAmendment,
     PublicationRequest,
     PublishedVersion,
@@ -103,10 +105,16 @@ from brand_maker.generation.repository import (
     SQLiteGenerationRepository,
     StartGenerationRequest,
 )
-from brand_maker.image_gen import OpenRouterImageClient, logo_prompt
+from brand_maker.image_gen import OpenRouterImageClient, logo_prompt, logo_variant_prompt
 from brand_maker.library_styles import LIBRARY_CSS
 from brand_maker.library_ui import LIBRARY_SCRIPT
 from brand_maker.library_web import detail_page, library_page, not_found_page
+from brand_maker.logo_derivatives import (
+    RASTER_MEDIA_TYPES,
+    LogoDerivative,
+    create_icon_set,
+    vectorize_logo,
+)
 from brand_maker.models import (
     BrandRequest,
     BrandResponse,
@@ -174,6 +182,82 @@ async def _append_asset(
     return await run_in_threadpool(
         partial(workspaces.update, updated, expected_revision=draft.revision)
     )
+
+
+async def _append_assets(
+    workspaces: SQLiteBrandSystemRepository,
+    draft: WorkingDraft,
+    registrations: list[AssetRegistration],
+) -> WorkingDraft:
+    """Append a complete derivative set in one draft revision."""
+
+    data = draft.model_dump(mode="json")
+    data.update(
+        {
+            "assets": [
+                *[item.model_dump(mode="json") for item in draft.assets],
+                *[item.model_dump(mode="json") for item in registrations],
+            ],
+            "revision": draft.revision + 1,
+        }
+    )
+    updated = WorkingDraft.model_validate(data)
+    return await run_in_threadpool(
+        partial(workspaces.update, updated, expected_revision=draft.revision)
+    )
+
+
+async def _register_derivatives(
+    assets: AssetStore,
+    source: AssetRegistration,
+    derivatives: list[LogoDerivative],
+) -> list[AssetRegistration]:
+    registrations: list[AssetRegistration] = []
+    for derivative in derivatives:
+        with tempfile.NamedTemporaryFile(delete=False) as buffer:
+            temporary = Path(buffer.name)
+            buffer.write(derivative.content)
+        try:
+            registrations.append(
+                await run_in_threadpool(
+                    partial(
+                        assets.import_managed,
+                        asset_id=f"asset.derivative.{uuid4().hex}",
+                        name=f"{source.name} — {derivative.name_suffix.replace('-', ' ')}",
+                        source=temporary,
+                        media_type=derivative.media_type,
+                        required=False,
+                    )
+                )
+            )
+        finally:
+            temporary.unlink(missing_ok=True)
+    return registrations
+
+
+async def _load_derivative_source(
+    request: Request,
+    brand_id: UUID,
+    asset_id: str,
+    expected_revision: int,
+) -> tuple[SQLiteBrandSystemRepository, AssetStore, WorkingDraft, AssetRegistration, bytes]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    assets = cast(AssetStore, request.app.state.asset_store)
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Brand system not found.")
+    if draft.revision != expected_revision:
+        raise HTTPException(status_code=409, detail="Draft revision conflict.")
+    source = next((item for item in draft.assets if item.id == asset_id), None)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Asset not found.")
+    if source.media_type not in RASTER_MEDIA_TYPES:
+        raise HTTPException(status_code=422, detail="A raster logo asset is required.")
+    try:
+        content = await run_in_threadpool(assets.read, source)
+    except (AssetMissing, AssetChanged, ValueError):
+        raise HTTPException(status_code=422, detail="The source asset failed validation.") from None
+    return workspaces, assets, draft, source, content
 
 
 def create_app(
@@ -844,6 +928,109 @@ def create_app(
             ) from None
         finally:
             temporary.unlink(missing_ok=True)
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/assets/{asset_id}/favicon-sets",
+        response_model=WorkingDraft,
+        status_code=201,
+        tags=["living brand systems"],
+    )
+    async def create_brand_favicon_set(
+        brand_id: UUID,
+        asset_id: str,
+        payload: CreateAssetDerivativeRequest,
+        request: Request,
+    ) -> WorkingDraft:
+        """Create six metadata-free favicon and app-icon PNGs from one raster logo."""
+
+        workspaces, assets, draft, source, content = await _load_derivative_source(
+            request, brand_id, asset_id, payload.expected_revision
+        )
+        try:
+            derivatives = await run_in_threadpool(create_icon_set, content, source.media_type)
+            registrations = await _register_derivatives(assets, source, derivatives)
+            return await _append_assets(workspaces, draft, registrations)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(status_code=422, detail="Could not create icons.") from None
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/assets/{asset_id}/vectorizations",
+        response_model=WorkingDraft,
+        status_code=201,
+        tags=["living brand systems"],
+    )
+    async def create_brand_vectorization(
+        brand_id: UUID,
+        asset_id: str,
+        payload: CreateAssetDerivativeRequest,
+        request: Request,
+    ) -> WorkingDraft:
+        """Trace one raster logo into path-only SVG geometry."""
+
+        workspaces, assets, draft, source, content = await _load_derivative_source(
+            request, brand_id, asset_id, payload.expected_revision
+        )
+        try:
+            derivative = await run_in_threadpool(vectorize_logo, content, source.media_type)
+            registrations = await _register_derivatives(assets, source, [derivative])
+            return await _append_assets(workspaces, draft, registrations)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(status_code=422, detail="Could not vectorize this logo.") from None
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/assets/{asset_id}/logo-variant-sets",
+        response_model=WorkingDraft,
+        status_code=201,
+        tags=["living brand systems"],
+    )
+    async def create_brand_logo_variant_set(
+        brand_id: UUID,
+        asset_id: str,
+        payload: GenerateLogoVariantsRequest,
+        request: Request,
+    ) -> WorkingDraft:
+        """Use the selected logo as an AI reference for explicit production variants."""
+
+        client = cast("OpenRouterImageClient | None", request.app.state.image_client)
+        if client is None:
+            raise HTTPException(status_code=503, detail="Image generation is not configured.")
+        workspaces, assets, draft, source, content = await _load_derivative_source(
+            request, brand_id, asset_id, payload.expected_revision
+        )
+        settings = cast(Settings, request.app.state.settings)
+        derivatives: list[LogoDerivative] = []
+        try:
+            for variant in payload.variants:
+                image_bytes, media_type = await client.generate(
+                    prompt=logo_variant_prompt(draft.brand_name, variant, payload.instructions),
+                    model=settings.image_model,
+                    reference=(content, source.media_type),
+                    aspect_ratio="2:1" if variant == "horizontal-lockup" else "1:1",
+                    background="transparent" if variant != "inverted" else "opaque",
+                )
+                derivatives.append(LogoDerivative(variant, image_bytes, media_type))
+            registrations = await _register_derivatives(assets, source, derivatives)
+            return await _append_assets(workspaces, draft, registrations)
+        except ProviderRefusal:
+            raise HTTPException(
+                status_code=422, detail="The image model declined this request."
+            ) from None
+        except ModelUnavailable:
+            raise HTTPException(
+                status_code=503, detail="The image model is temporarily unavailable."
+            ) from None
+        except ProviderError:
+            raise HTTPException(status_code=502, detail="Logo variant generation failed.") from None
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(
+                status_code=502, detail="A generated logo variant was not usable."
+            ) from None
 
     @app.post(
         "/api/brand-systems/{brand_id}/approvals",

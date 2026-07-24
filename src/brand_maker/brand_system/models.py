@@ -196,6 +196,33 @@ class GenerateLogoRequest(ContractModel):
     name: str | None = Field(default=None, min_length=1, max_length=300)
 
 
+class CreateAssetDerivativeRequest(ContractModel):
+    expected_revision: int = Field(..., ge=1)
+
+
+LogoVariantKind = Literal["monochrome", "inverted", "horizontal-lockup", "icon-only"]
+
+
+def _default_logo_variants() -> list[LogoVariantKind]:
+    return ["monochrome", "inverted", "horizontal-lockup", "icon-only"]
+
+
+class GenerateLogoVariantsRequest(CreateAssetDerivativeRequest):
+    variants: list[LogoVariantKind] = Field(
+        default_factory=_default_logo_variants,
+        min_length=1,
+        max_length=4,
+    )
+    instructions: str = Field(default="", max_length=2000)
+
+    @field_validator("variants")
+    @classmethod
+    def require_unique_variants(cls, variants: list[LogoVariantKind]) -> list[LogoVariantKind]:
+        if len(variants) != len(set(variants)):
+            raise ValueError("logo variants must be unique")
+        return variants
+
+
 SectionStatus = Literal["incomplete", "draft", "reviewed", "approved"]
 
 

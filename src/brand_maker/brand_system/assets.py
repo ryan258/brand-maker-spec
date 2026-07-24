@@ -111,6 +111,20 @@ class AssetStore:
             required=required,
         )
 
+    def read(self, asset: AssetRegistration) -> bytes:
+        """Read an asset only after revalidating its registered integrity metadata."""
+
+        if asset.storage == "managed":
+            source = self._root / asset.content_hash[:2] / asset.content_hash[2:]
+        elif asset.source_path is not None:
+            source = Path(asset.source_path)
+        else:
+            raise AssetMissing(asset.id)
+        size, content_hash = self._inspect(source, asset.media_type)
+        if size != asset.size_bytes or content_hash != asset.content_hash:
+            raise AssetChanged(asset.id)
+        return source.read_bytes()
+
     def prepare_publication(self, draft: WorkingDraft) -> WorkingDraft:
         assets: list[AssetRegistration] = []
         for asset in draft.assets:

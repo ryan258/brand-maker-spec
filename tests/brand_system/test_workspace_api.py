@@ -1,6 +1,8 @@
+from io import BytesIO
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from brand_maker.app import create_app
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
@@ -22,11 +24,32 @@ class FakeImageClient:
         self.refuse = refuse
         self.prompts: list[str] = []
 
-    async def generate(self, *, prompt: str, model: str) -> tuple[bytes, str]:
+        self.references: list[tuple[bytes, str] | None] = []
+
+    async def generate(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        reference: tuple[bytes, str] | None = None,
+        aspect_ratio: str | None = None,
+        background: str | None = None,
+    ) -> tuple[bytes, str]:
         self.prompts.append(prompt)
+        self.references.append(reference)
         if self.refuse:
             raise ProviderRefusal("declined")
         return _PNG, "image/png"
+
+
+def logo_png() -> bytes:
+    image = Image.new("RGBA", (64, 32), (255, 255, 255, 0))
+    for x in range(16, 48):
+        for y in range(8, 24):
+            image.putpixel((x, y), (17, 34, 51, 255))
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def legacy_kit() -> BrandKit:
@@ -347,6 +370,114 @@ def test_logo_generation_maps_model_refusal_to_422(tmp_path: Path) -> None:
         )
 
     assert response.status_code == 422
+
+
+def test_favicon_set_and_vectorization_append_managed_derivatives_atomically(
+    tmp_path: Path,
+) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Primary logo", "required": "false"},
+            files={"file": ("logo.png", logo_png(), "image/png")},
+        ).json()
+        source_id = uploaded["assets"][0]["id"]
+        icons = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/favicon-sets",
+            json={"expected_revision": 2},
+        )
+        vector = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/vectorizations",
+            json={"expected_revision": 3},
+        )
+
+    assert icons.status_code == 201
+    assert icons.json()["revision"] == 3
+    icon_assets = icons.json()["assets"][1:]
+    assert len(icon_assets) == 6
+    assert all(item["storage"] == "managed" for item in icon_assets)
+    assert [item["name"] for item in icon_assets] == [
+        "Primary logo — favicon 16",
+        "Primary logo — favicon 32",
+        "Primary logo — favicon 48",
+        "Primary logo — apple touch icon 180",
+        "Primary logo — app icon 192",
+        "Primary logo — app icon 512",
+    ]
+    assert vector.status_code == 201
+    assert vector.json()["revision"] == 4
+    assert vector.json()["assets"][-1]["media_type"] == "image/svg+xml"
+    assert vector.json()["assets"][-1]["name"] == "Primary logo — vector"
+
+
+def test_ai_logo_variants_use_selected_source_reference(tmp_path: Path) -> None:
+    fake = FakeImageClient()
+    test_client, _ = client(tmp_path, image_client=fake)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Primary logo", "required": "false"},
+            files={"file": ("logo.png", logo_png(), "image/png")},
+        ).json()
+        source_id = uploaded["assets"][0]["id"]
+        variants = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/logo-variant-sets",
+            json={"expected_revision": 2},
+        )
+
+    assert variants.status_code == 201
+    assert variants.json()["revision"] == 3
+    assert [item["name"] for item in variants.json()["assets"][1:]] == [
+        "Primary logo — monochrome",
+        "Primary logo — inverted",
+        "Primary logo — horizontal lockup",
+        "Primary logo — icon only",
+    ]
+    assert len(fake.references) == 4
+    assert all(reference == (logo_png(), "image/png") for reference in fake.references)
+
+
+def test_logo_derivatives_reject_unknown_stale_and_non_raster_sources(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Broken", "required": "false"},
+            files={"file": ("broken.png", b"not an image", "image/png")},
+        ).json()
+        source_id = uploaded["assets"][0]["id"]
+        stale = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/favicon-sets",
+            json={"expected_revision": 1},
+        )
+        malformed = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/favicon-sets",
+            json={"expected_revision": 2},
+        )
+        missing = api.post(
+            f"/api/brand-systems/{brand_id}/assets/asset.logo.missing/vectorizations",
+            json={"expected_revision": 2},
+        )
+
+    assert stale.status_code == 409
+    assert malformed.status_code == 422
+    assert missing.status_code == 404
 
 
 def test_workspace_api_rejects_invalid_pagination_and_unknown_sources(

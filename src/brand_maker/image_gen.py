@@ -48,7 +48,11 @@ class OpenRouterImageClient:
     ) -> tuple[bytes, str]:
         """Return (image_bytes, media_type) for one generated image."""
 
-        payload = {"model": model, "prompt": prompt, "output_format": "png"}
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "output_format": "png",
+        }
         if reference is not None:
             reference_bytes, reference_media_type = reference
             encoded = base64.b64encode(reference_bytes).decode("ascii")
@@ -142,3 +146,32 @@ def logo_prompt(draft: WorkingDraft, instructions: str = "") -> str:
     if instructions.strip():
         parts.append(instructions.strip()[:2000])
     return " ".join(parts)
+
+
+def logo_variant_prompt(brand_name: str, variant: str, instructions: str = "") -> str:
+    """Build a fidelity-first edit prompt for one explicit logo variant."""
+
+    directions = {
+        "monochrome": (
+            "Convert the supplied logo to a single solid color on a transparent background."
+        ),
+        "inverted": (
+            "Create an inverted light-on-dark version of the supplied logo while preserving "
+            "its exact geometry and wording."
+        ),
+        "horizontal-lockup": (
+            "Recompose the supplied logo as a balanced horizontal lockup. Preserve the mark, "
+            "wording, typography character, and brand recognition."
+        ),
+        "icon-only": (
+            "Create an icon-only mark from the supplied logo. Remove the wordmark while "
+            "preserving the recognizable symbol and its proportions."
+        ),
+    }
+    prompt = (
+        f'Edit the supplied source logo for "{brand_name}". {directions[variant]} '
+        "Do not invent a different brand or add mockup scenery. Return only the finished logo."
+    )
+    if instructions.strip():
+        prompt += f" Additional constraints: {instructions.strip()[:2000]}"
+    return prompt

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from io import BytesIO
+from typing import cast
 
 from PIL import Image, ImageChops, ImageOps, UnidentifiedImageError
 
@@ -71,7 +72,11 @@ def create_icon_set(content: bytes, media_type: str) -> list[LogoDerivative]:
 
     image = _decode_raster(content, media_type)
     return [
-        LogoDerivative(name_suffix=suffix, content=_square_icon(image, size), media_type="image/png")
+        LogoDerivative(
+            name_suffix=suffix,
+            content=_square_icon(image, size),
+            media_type="image/png",
+        )
         for suffix, size in ICON_SIZES
     ]
 
@@ -89,8 +94,8 @@ def vectorize_logo(content: bytes, media_type: str) -> LogoDerivative:
     color_pixels: dict[tuple[int, int, int], set[tuple[int, int]]] = {}
     for y in range(image.height):
         for x in range(image.width):
-            if alpha.getpixel((x, y)) > 32:
-                color = palette.getpixel((x, y))
+            if cast(int, alpha.getpixel((x, y))) > 32:
+                color = cast(tuple[int, int, int], palette.getpixel((x, y)))
                 color_pixels.setdefault(color, set()).add((x, y))
 
     paths: list[str] = []
