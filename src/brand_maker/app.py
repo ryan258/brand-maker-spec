@@ -146,7 +146,7 @@ from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 from brand_maker.workshop_styles import WORKSHOP_CSS
 from brand_maker.workshop_ui import WORKSHOP_SCRIPT
-from brand_maker.workshop_web import workspace_detail, workspace_index
+from brand_maker.workshop_web import add_derivative_tools, workspace_detail, workspace_index
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +406,9 @@ def create_app(
         store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
         if await run_in_threadpool(store.get, brand_id) is None:
             raise HTTPException(status_code=404, detail="Brand system not found.")
-        return HTMLResponse(workspace_detail(brand_id), headers=BROWSER_HEADERS)
+        return HTMLResponse(
+            add_derivative_tools(workspace_detail(brand_id)), headers=BROWSER_HEADERS
+        )
 
     @app.get(
         "/brand-systems/{brand_id}/bible",

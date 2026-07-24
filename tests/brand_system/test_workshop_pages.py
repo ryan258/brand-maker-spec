@@ -63,6 +63,11 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert '<nav id="section-navigation" aria-label="Brand sections">' in page.text
     assert '<form id="section-form"' in page.text
     assert 'id="editor-status" role="status" aria-live="polite"' in page.text
+    assert '<label for="derivative-source">Source raster logo</label>' in page.text
+    assert 'id="create-favicon-set" type="button"' in page.text
+    assert 'id="create-logo-variants" type="button"' in page.text
+    assert 'id="create-vector" type="button"' in page.text
+    assert 'id="derivative-status" role="status" aria-live="polite"' in page.text
     assert script.status_code == 200
     assert "fetch(`/api/brand-systems/${encodeURIComponent(brandId)}`)" in script.text
     assert 'get("sourceBrandId")' in script.text
@@ -70,6 +75,9 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
     assert "eval(" not in script.text
+    assert 'createDerivatives("favicon-sets"' in script.text
+    assert 'createDerivatives("logo-variant-sets"' in script.text
+    assert 'createDerivatives("vectorizations"' in script.text
     assert styles.status_code == 200
     assert "@media (max-width: 48rem)" in styles.text
     assert "prefers-reduced-motion" in styles.text
