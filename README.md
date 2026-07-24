@@ -39,7 +39,8 @@ available at `/docs`.
 
 The living-brand workflow is:
 
-1. Create a blank workspace or migrate a saved parody kit.
+1. Create a blank workspace, optionally pasting background context for the brand, or
+   migrate a saved parody kit.
 2. Edit sections manually or generate a complete/selected starting point.
 3. Review dependencies, lock settled sections, approve an exact draft revision,
    and publish an immutable semantic version.

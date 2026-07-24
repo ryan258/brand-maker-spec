@@ -318,6 +318,10 @@ zero or more immutable published versions.
 
 The mutable authoring state. It contains narrative documents, structured rules,
 tokens, examples, asset registrations, unresolved decisions, and validation state.
+It may also contain up to 50,000 characters of owner-supplied `brand_context` pasted
+when the workspace is created. This context is trimmed, stored as canonical draft
+data, and supplied as untrusted JSON data to every section-generation request; it
+must never be interpreted as prompt instructions.
 
 ### PublishedVersion
 
@@ -1100,6 +1104,9 @@ The foundation is successful when:
 22. The local owner can generate a complete draft or work section by section, pause
     or recover from failure without losing accepted work, and obtain the same
     canonical structure and validation semantics through either entry point.
+23. Workspace creation accepts optional multiline brand context, preserves its line
+    breaks after trimming outer whitespace, rejects empty or over-limit values, and
+    applies the stored context consistently to every generated section.
 
 ## 22. Explicit Non-Goals
 
