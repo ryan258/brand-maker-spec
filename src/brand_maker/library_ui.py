@@ -167,9 +167,11 @@ function renderDetail(saved) {
   const copy = element("button", "quiet-button", "Copy JSON");
   copy.type = "button";
   copy.addEventListener("click", copyDetail);
+  const build = element("a", "primary-action", "Build complete brand bible");
+  build.href = `/brand-systems?sourceBrandId=${encodeURIComponent(saved.id)}`;
   const create = element("a", "primary-action", "Create another");
   create.href = "/#brand-form";
-  actions.append(copy, create);
+  actions.append(copy, build, create);
   hero.append(heading, actions);
 
   const grid = element("div", "detail-grid");

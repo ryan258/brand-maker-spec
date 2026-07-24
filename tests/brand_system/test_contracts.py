@@ -55,6 +55,23 @@ def valid_draft() -> dict[str, object]:
                         "references": [{"kind": "token", "target_id": "token.color.primary"}],
                     }
                 ],
+                "patterns": [
+                    {
+                        "id": "pattern.voice.say-never-say",
+                        "name": "Say and never say",
+                        "kind": "say_never_say",
+                        "summary": "Translate the voice into repeatable language choices.",
+                        "specifications": [
+                            {
+                                "label": "Audience posture",
+                                "value": "Speak as a capable guide, never an authority figure.",
+                            }
+                        ],
+                        "do_guidance": ["Say: Here is the clearest next step."],
+                        "dont_guidance": ["Never say: Trust us, we know best."],
+                        "references": [],
+                    }
+                ],
             }
         ],
     }
@@ -97,6 +114,16 @@ def test_unsupported_narrative_block_type_is_rejected() -> None:
 def test_raw_html_is_rejected_from_narrative_text(text: str) -> None:
     payload = valid_draft()
     payload["sections"][0]["blocks"][0]["text"] = text  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="raw HTML"):
+        WorkingDraft.model_validate(payload)
+
+
+def test_raw_html_is_rejected_from_pattern_specifications() -> None:
+    payload = valid_draft()
+    payload["sections"][0]["patterns"][0]["specifications"][0][  # type: ignore[index]
+        "value"
+    ] = '<button onclick="alert(1)">Act</button>'
 
     with pytest.raises(ValidationError, match="raw HTML"):
         WorkingDraft.model_validate(payload)

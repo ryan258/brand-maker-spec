@@ -20,10 +20,11 @@ class GoodCompleter:
         request = json.loads(messages[1]["content"])
         self.requests.append(request)
         section_id = request["section_id"]
+        slug = section_id.removeprefix("section.")
         self.calls.append(section_id)
         return json.dumps(
             {
-                "prompt_version": "living-brand-section-v1",
+                "prompt_version": request["prompt_version"],
                 "section_id": section_id,
                 "rationale": "A bounded generated starting point.",
                 "section": {
@@ -31,10 +32,76 @@ class GoodCompleter:
                     "title": request["section_title"],
                     "status": "draft",
                     "locked": False,
-                    "blocks": [],
-                    "rules": [],
-                    "tokens": [],
-                    "examples": [],
+                    "blocks": [
+                        {
+                            "id": f"block.{slug}.overview",
+                            "type": "paragraph",
+                            "text": "A specific strategic overview.",
+                            "references": [],
+                        },
+                        {
+                            "id": f"block.{slug}.application",
+                            "type": "paragraph",
+                            "text": "Practical application guidance.",
+                            "references": [],
+                        },
+                    ],
+                    "rules": [
+                        {
+                            "id": f"rule.{slug}.primary",
+                            "name": "Primary rule",
+                            "description": "Apply this decision consistently.",
+                            "enforcement": "warning",
+                            "references": [],
+                        }
+                    ],
+                    "tokens": (
+                        [
+                            {
+                                "id": f"token.{slug}.base",
+                                "name": "Base value",
+                                "value_type": "string",
+                                "value": "brand-default",
+                                "references": [],
+                            }
+                        ]
+                        if request["content_requirements"]["tokens_required"]
+                        else []
+                    ),
+                    "examples": [
+                        {
+                            "id": f"example.{slug}.do",
+                            "kind": "do",
+                            "text": "Follow the guidance in a concrete way.",
+                            "references": [],
+                        },
+                        {
+                            "id": f"example.{slug}.dont",
+                            "kind": "dont",
+                            "text": "Do not contradict the guidance.",
+                            "references": [],
+                        },
+                    ],
+                    "patterns": [
+                        {
+                            "id": f"pattern.{slug}.{kind}",
+                            "name": kind.replace("_", " ").title(),
+                            "kind": kind,
+                            "summary": "A concrete application pattern.",
+                            "specifications": [
+                                {
+                                    "label": "Default",
+                                    "value": "Apply the documented specification.",
+                                }
+                            ],
+                            "do_guidance": ["Use this approved pattern."],
+                            "dont_guidance": ["Do not invent an unsupported variant."],
+                            "references": [],
+                        }
+                        for kind in request["content_requirements"][
+                            "required_pattern_kinds"
+                        ]
+                    ],
                 },
             }
         )
@@ -83,8 +150,7 @@ async def test_complete_run_persists_every_section_and_finishes(tmp_path: Path) 
     assert completed.cursor == len(SECTION_CATALOG)
     assert completer.calls == list(SECTION_CATALOG)
     assert all(
-        request["brand_context"]
-        == "Independent bookstores serving curious local readers."
+        request["brand_context"] == "Independent bookstores serving curious local readers."
         for request in completer.requests
     )
     assert stored is not None
@@ -144,9 +210,7 @@ async def test_duplicate_resume_commands_share_one_bounded_run(tmp_path: Path) -
     runs = SQLiteGenerationRepository(tmp_path / "brands.db")
     orchestrator = GenerationOrchestrator(workspaces=workspaces, runs=runs)
     completer = GoodCompleter()
-    run = orchestrator.start(
-        draft, target_section_id="section.strategy", model="test-model"
-    )
+    run = orchestrator.start(draft, target_section_id="section.strategy", model="test-model")
 
     first, second = await asyncio.gather(
         orchestrator.resume(run.id, completer=completer),

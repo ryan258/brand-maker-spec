@@ -5,7 +5,12 @@ from typing import Self
 
 from pydantic import model_validator
 
-from brand_maker.brand_system.models import BrandSection, NarrativeText, StableId
+from brand_maker.brand_system.models import (
+    BrandSection,
+    NarrativeText,
+    PatternKind,
+    StableId,
+)
 from brand_maker.models import ContractModel
 
 
@@ -88,6 +93,45 @@ SECTION_CATALOG = {
     )
 }
 
+TOKEN_SECTIONS = frozenset(
+    {
+        "section.color",
+        "section.typography",
+        "section.layout",
+        "section.motion",
+        "section.digital",
+    }
+)
+
+REQUIRED_PATTERN_KINDS: dict[str, tuple[PatternKind, ...]] = {
+    "section.strategy": ("positioning_framework", "audience_profile"),
+    "section.messaging": ("message_hierarchy", "content_template"),
+    "section.voice": ("say_never_say", "voice_scale"),
+    "section.logo": ("logo_lockup", "logo_clear_space"),
+    "section.color": ("color_application",),
+    "section.typography": ("type_scale",),
+    "section.layout": ("layout_template",),
+    "section.imagery": ("image_art_direction",),
+    "section.illustration": ("icon_system",),
+    "section.motion": ("motion_behavior", "sound_direction"),
+    "section.digital": ("web_component", "interaction_pattern"),
+    "section.channels": ("channel_playbook", "content_template"),
+    "section.accessibility": ("accessibility_checklist",),
+    "section.governance": ("governance_workflow",),
+}
+
+
+def content_requirements(section_id: str) -> dict[str, object]:
+    """Return the minimum substantive content contract for generated guidance."""
+
+    return {
+        "minimum_narrative_blocks": 2,
+        "minimum_rules": 1,
+        "minimum_examples": 2,
+        "tokens_required": section_id in TOKEN_SECTIONS,
+        "required_pattern_kinds": list(REQUIRED_PATTERN_KINDS[section_id]),
+    }
+
 
 class GeneratedSectionEnvelope(ContractModel):
     prompt_version: str
@@ -99,4 +143,19 @@ class GeneratedSectionEnvelope(ContractModel):
     def bind_section_identity(self) -> Self:
         if self.section_id != self.section.id:
             raise ValueError("generated section cannot redefine section identity")
+        if len(self.section.blocks) < 2 or not self.section.rules or len(self.section.examples) < 2:
+            raise ValueError(
+                "generated section must contain comprehensive guidance: two narrative "
+                "blocks, one rule, and two examples"
+            )
+        if self.section_id in TOKEN_SECTIONS and not self.section.tokens:
+            raise ValueError("generated technical section requires an implementation token")
+        required_patterns = set(REQUIRED_PATTERN_KINDS[self.section_id])
+        present_patterns = {pattern.kind for pattern in self.section.patterns}
+        missing_patterns = sorted(required_patterns - present_patterns)
+        if missing_patterns:
+            raise ValueError(
+                "generated section missing required brand patterns: "
+                + ", ".join(missing_patterns)
+            )
         return self

@@ -16,9 +16,10 @@ class UnusedPipeline:
 class SectionCompleter:
     async def complete(self, *, messages, model, temperature, max_tokens) -> str:
         request = json.loads(messages[1]["content"])
+        slug = request["section_id"].removeprefix("section.")
         return json.dumps(
             {
-                "prompt_version": "living-brand-section-v1",
+                "prompt_version": request["prompt_version"],
                 "section_id": request["section_id"],
                 "rationale": "A deterministic test section.",
                 "section": {
@@ -26,10 +27,76 @@ class SectionCompleter:
                     "title": request["section_title"],
                     "status": "draft",
                     "locked": False,
-                    "blocks": [],
-                    "rules": [],
-                    "tokens": [],
-                    "examples": [],
+                    "blocks": [
+                        {
+                            "id": f"block.{slug}.overview",
+                            "type": "paragraph",
+                            "text": "A specific strategic overview.",
+                            "references": [],
+                        },
+                        {
+                            "id": f"block.{slug}.application",
+                            "type": "paragraph",
+                            "text": "Practical application guidance.",
+                            "references": [],
+                        },
+                    ],
+                    "rules": [
+                        {
+                            "id": f"rule.{slug}.primary",
+                            "name": "Primary rule",
+                            "description": "Apply this decision consistently.",
+                            "enforcement": "warning",
+                            "references": [],
+                        }
+                    ],
+                    "tokens": (
+                        [
+                            {
+                                "id": f"token.{slug}.base",
+                                "name": "Base value",
+                                "value_type": "string",
+                                "value": "brand-default",
+                                "references": [],
+                            }
+                        ]
+                        if request["content_requirements"]["tokens_required"]
+                        else []
+                    ),
+                    "examples": [
+                        {
+                            "id": f"example.{slug}.do",
+                            "kind": "do",
+                            "text": "Follow the guidance in a concrete way.",
+                            "references": [],
+                        },
+                        {
+                            "id": f"example.{slug}.dont",
+                            "kind": "dont",
+                            "text": "Do not contradict the guidance.",
+                            "references": [],
+                        },
+                    ],
+                    "patterns": [
+                        {
+                            "id": f"pattern.{slug}.{kind}",
+                            "name": kind.replace("_", " ").title(),
+                            "kind": kind,
+                            "summary": "A concrete application pattern.",
+                            "specifications": [
+                                {
+                                    "label": "Default",
+                                    "value": "Apply the documented specification.",
+                                }
+                            ],
+                            "do_guidance": ["Use this approved pattern."],
+                            "dont_guidance": ["Do not invent an unsupported variant."],
+                            "references": [],
+                        }
+                        for kind in request["content_requirements"][
+                            "required_pattern_kinds"
+                        ]
+                    ],
                 },
             }
         )

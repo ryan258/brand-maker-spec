@@ -93,5 +93,7 @@ def test_library_assets_are_safe_and_dependency_free(tmp_path: Path) -> None:
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
     assert "eval(" not in script.text
+    assert "Build complete brand bible" in script.text
+    assert "/brand-systems?sourceBrandId=" in script.text
     assert styles.status_code == 200
     assert styles.headers["content-type"].startswith("text/css")

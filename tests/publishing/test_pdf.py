@@ -19,6 +19,8 @@ def test_pdf_is_searchable_tagged_bookmarked_and_source_bound() -> None:
     assert payload.startswith(b"%PDF-")
     assert "Northstar" in text
     assert "Version 1.0.0 - amendment 0" in text
+    assert "Say / never say" in text
+    assert "Lead with the reader benefit." in text
     assert reader.outline
     assert "/StructTreeRoot" in reader.trailer["/Root"]
     assert reader.metadata is not None

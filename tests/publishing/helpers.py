@@ -3,9 +3,11 @@ from uuid import UUID
 
 from brand_maker.brand_system.models import (
     ApprovalRecord,
+    BrandPattern,
     BrandSection,
     LocalOwner,
     NarrativeBlock,
+    PatternSpecification,
     PublicationManifest,
     PublishedVersion,
     RenderedPublishedVersion,
@@ -31,6 +33,21 @@ def published_version() -> PublishedVersion:
                         id="block.strategy.purpose",
                         type="paragraph",
                         text="A clear purpose & durable direction.",
+                    )
+                ],
+                patterns=[
+                    BrandPattern(
+                        id="pattern.voice.say-never-say",
+                        name="Say / never say",
+                        kind="say_never_say",
+                        summary="Turn the voice into concrete language choices.",
+                        specifications=[
+                            PatternSpecification(
+                                label="Say", value="Lead with the reader benefit."
+                            )
+                        ],
+                        do_guidance=["Use specific, verifiable language."],
+                        dont_guidance=["Use unsupported superlatives."],
                     )
                 ],
             ),

@@ -9,6 +9,9 @@ def test_markdown_is_deterministic_and_round_trips_canonical_draft() -> None:
     assert first == export_markdown(draft, version="1.0.0", amendment_revision=0)
     assert import_markdown(first) == draft
     assert "Source version: 1.0.0; amendment revision: 0" in first
+    assert "### Patterns and playbooks" in first
+    assert "#### Say / never say" in first
+    assert "**Say:** Lead with the reader benefit." in first
 
 
 def test_markdown_import_requires_constrained_canonical_payload() -> None:

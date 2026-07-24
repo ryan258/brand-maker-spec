@@ -42,12 +42,20 @@ The living-brand workflow is:
 1. Create a blank workspace, optionally pasting background context for the brand, or
    migrate a saved parody kit.
 2. Edit sections manually or generate a complete/selected starting point.
-3. Review dependencies, lock settled sections, approve an exact draft revision,
+3. Open **View complete brand bible** for the live, navigable source of truth across
+   context, guidance, rules, tokens, examples, patterns/playbooks, and registered
+   assets; print it or save it as PDF directly from the browser. Patterns include
+   say/never-say guidance, message systems, web-component specifications and states,
+   type scales, layout templates, channel playbooks, and governance workflows.
+4. Review dependencies, lock settled sections, approve an exact draft revision,
    and publish an immutable semantic version.
-4. Render creator, designer, business, or agency views; export Markdown, developer
+5. Render creator, designer, business, or agency views; export Markdown, developer
    tokens/rules, canonical archives, or tagged PDF/UA.
-5. Register artifact revisions and run deterministic compliance checks. Unsupported
+6. Register artifact revisions and run deterministic compliance checks. Unsupported
    checks, model judgment, evidence, and expiring exceptions remain visibly distinct.
+
+Saved quick kits remain available in the kit library. Use **Build complete brand
+bible** on a saved kit to preserve it as the exact source of a new living workspace.
 
 The original `POST /brand` endpoint remains stateless and backward-compatible. The
 browser uses the persistent library API:

@@ -7,6 +7,7 @@ import os
 from html import escape
 from pathlib import Path
 
+from brand_maker.publishing.patterns import render_pattern_html
 from brand_maker.publishing.projections import AudienceProjection
 
 
@@ -19,9 +20,11 @@ def projection_html(view: AudienceProjection) -> str:
             for rule in section.rules
         )
         rule_list = f"<h3>Rules</h3><ul>{rules}</ul>" if rules else ""
+        patterns = "".join(render_pattern_html(pattern) for pattern in section.patterns)
+        pattern_list = f"<h3>Patterns and playbooks</h3>{patterns}" if patterns else ""
         sections.append(
             f'<section id="{escape(section.id)}"><h2>{escape(section.title)}</h2>'
-            f"{blocks}{rule_list}</section>"
+            f"{blocks}{rule_list}{pattern_list}</section>"
         )
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{escape(view.brand_name)} brand guide</title><meta name="author" content="Brand System Maker"><style>
 @page {{ size: letter; margin: 0.7in 0.7in 0.75in; @bottom-right {{ content: "Page " counter(page) " of " counter(pages); color: #44546a; font-size: 9pt; }} }}

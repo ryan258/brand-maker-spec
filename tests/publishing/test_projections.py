@@ -25,3 +25,5 @@ def test_projection_html_escapes_canonical_text_and_identifies_revision() -> Non
 
     assert "Version 1.0.0, amendment 0" in page
     assert "purpose &amp; durable" in page
+    assert "Say / never say" in page
+    assert "Lead with the reader benefit." in page

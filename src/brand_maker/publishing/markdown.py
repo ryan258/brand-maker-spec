@@ -20,6 +20,27 @@ def export_markdown(draft: WorkingDraft, *, version: str, amendment_revision: in
         lines.extend([f"## {section.title}", ""])
         for block in section.blocks:
             lines.extend([block.text, ""])
+        if section.patterns:
+            lines.extend(["### Patterns and playbooks", ""])
+        for pattern in section.patterns:
+            lines.extend(
+                [
+                    f"#### {pattern.name}",
+                    "",
+                    f"Kind: {pattern.kind}",
+                    "",
+                    pattern.summary,
+                    "",
+                ]
+            )
+            lines.extend(
+                f"- **{item.label}:** {item.value}" for item in pattern.specifications
+            )
+            lines.extend(["", "**Do**", ""])
+            lines.extend(f"- {item}" for item in pattern.do_guidance)
+            lines.extend(["", "**Do not**", ""])
+            lines.extend(f"- {item}" for item in pattern.dont_guidance)
+            lines.append("")
     lines.extend([f"```{CANONICAL_MARKER}", canonical, "```", ""])
     return "\n".join(lines)
 

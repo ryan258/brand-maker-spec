@@ -21,6 +21,8 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
+from brand_maker.brand_bible import render_brand_bible
+from brand_maker.brand_bible_styles import BRAND_BIBLE_CSS
 from brand_maker.brand_system.amendments import (
     AmendmentRevisionNotFound,
     AmendmentTargetNotClerical,
@@ -260,6 +262,14 @@ def create_app(
     async def workshop_styles() -> Response:
         return Response(WORKSHOP_CSS, media_type="text/css")
 
+    @app.get("/assets/brand-bible.css", include_in_schema=False)
+    async def brand_bible_styles() -> Response:
+        return Response(
+            BRAND_BIBLE_CSS,
+            media_type="text/css",
+            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+        )
+
     @app.get("/assets/compliance.js", include_in_schema=False)
     async def compliance_script() -> Response:
         return Response(COMPLIANCE_SCRIPT, media_type="text/javascript")
@@ -278,6 +288,18 @@ def create_app(
         if await run_in_threadpool(store.get, brand_id) is None:
             raise HTTPException(status_code=404, detail="Brand system not found.")
         return HTMLResponse(workspace_detail(brand_id), headers=BROWSER_HEADERS)
+
+    @app.get(
+        "/brand-systems/{brand_id}/bible",
+        response_class=HTMLResponse,
+        include_in_schema=False,
+    )
+    async def brand_system_bible(brand_id: UUID, request: Request) -> HTMLResponse:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        draft = await run_in_threadpool(store.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        return HTMLResponse(render_brand_bible(draft), headers=BROWSER_HEADERS)
 
     @app.get("/brands", response_class=HTMLResponse, include_in_schema=False)
     async def brand_library_page() -> HTMLResponse:

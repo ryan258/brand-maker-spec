@@ -21,7 +21,9 @@ StableId = Annotated[
 ShortText = Annotated[str, Field(min_length=1, max_length=300)]
 NarrativeText = Annotated[str, Field(min_length=1, max_length=50_000)]
 
-ReferenceKind = Literal["section", "block", "rule", "token", "asset", "example"]
+ReferenceKind = Literal[
+    "section", "block", "rule", "token", "asset", "example", "pattern"
+]
 BlockType = Literal[
     "paragraph",
     "heading",
@@ -104,6 +106,59 @@ class BrandExample(ContractModel):
     _reject_html = field_validator("text")(reject_raw_html)
 
 
+PatternKind = Literal[
+    "positioning_framework",
+    "audience_profile",
+    "message_hierarchy",
+    "content_template",
+    "say_never_say",
+    "voice_scale",
+    "logo_lockup",
+    "logo_clear_space",
+    "color_application",
+    "type_scale",
+    "layout_template",
+    "image_art_direction",
+    "icon_system",
+    "motion_behavior",
+    "sound_direction",
+    "web_component",
+    "interaction_pattern",
+    "channel_playbook",
+    "accessibility_checklist",
+    "governance_workflow",
+]
+
+
+class PatternSpecification(ContractModel):
+    """One labeled, implementation-facing detail within a brand pattern."""
+
+    label: ShortText
+    value: NarrativeText
+
+    _reject_html = field_validator("value")(reject_raw_html)
+
+
+class BrandPattern(ContractModel):
+    """An actionable application pattern or playbook derived from the brand."""
+
+    id: StableId
+    name: ShortText
+    kind: PatternKind
+    summary: NarrativeText
+    specifications: list[PatternSpecification] = Field(..., min_length=1, max_length=100)
+    do_guidance: list[NarrativeText] = Field(..., min_length=1, max_length=100)
+    dont_guidance: list[NarrativeText] = Field(..., min_length=1, max_length=100)
+    references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+
+    _reject_summary_html = field_validator("summary")(reject_raw_html)
+
+    @field_validator("do_guidance", "dont_guidance")
+    @classmethod
+    def reject_guidance_html(cls, values: list[str]) -> list[str]:
+        return [reject_raw_html(value) for value in values]
+
+
 class AssetRegistration(ContractModel):
     """Integrity-bound metadata for one linked or managed production asset."""
 
@@ -149,6 +204,7 @@ class BrandSection(ContractModel):
     rules: list[BrandRule] = Field(default_factory=list, max_length=1_000)
     tokens: list[BrandToken] = Field(default_factory=list, max_length=1_000)
     examples: list[BrandExample] = Field(default_factory=list, max_length=1_000)
+    patterns: list[BrandPattern] = Field(default_factory=list, max_length=1_000)
 
 
 class WorkingDraft(ContractModel):
@@ -173,6 +229,7 @@ class WorkingDraft(ContractModel):
             "rule": [rule.id for section in self.sections for rule in section.rules],
             "token": [token.id for section in self.sections for token in section.tokens],
             "example": [example.id for section in self.sections for example in section.examples],
+            "pattern": [pattern.id for section in self.sections for pattern in section.patterns],
             "asset": [asset.id for asset in self.assets],
         }
         require_unique_ids(canonical_id for ids in entities.values() for canonical_id in ids)
@@ -201,6 +258,12 @@ class WorkingDraft(ContractModel):
             for section in self.sections
             for example in section.examples
             for reference in example.references
+        )
+        referents.extend(
+            reference
+            for section in self.sections
+            for pattern in section.patterns
+            for reference in pattern.references
         )
         require_known_references(
             ((reference.kind, reference.target_id) for reference in referents), known_by_kind

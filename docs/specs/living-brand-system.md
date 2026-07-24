@@ -431,6 +431,40 @@ content is deduplicated without merging distinct asset metadata or usage roles.
 A structured demonstration of correct, incorrect, or contextual usage. Examples
 may be text, safe markup, configuration, or references to registered assets.
 
+### Pattern and Playbook
+
+An actionable, typed brand application specification. It bridges strategic prose
+and production work without pretending to be a maintained component library. Every
+pattern has a stable ID, name, enumerated kind, summary, one or more labeled
+specifications, do guidance, do-not guidance, and canonical references. Examples
+include say/never-say lists, message hierarchies, web-component anatomy and states,
+type scales, layout templates, channel playbooks, and governance workflows.
+
+Generated sections must satisfy this deliverables matrix. These entries are minimums,
+not limits; the model may add applicable patterns but may not omit required ones.
+
+| Section | Required patterns and playbooks |
+|---|---|
+| Strategy | Positioning framework; audience profile |
+| Messaging | Message hierarchy; content template |
+| Voice | Say/never-say; voice scale |
+| Logo | Lockup system; clear-space and minimum-size specification |
+| Color | Color application matrix |
+| Typography | Responsive type scale |
+| Layout | Layout template and responsive composition |
+| Imagery | Image art-direction brief |
+| Illustration | Icon and illustration system |
+| Motion and sound | Motion behavior; sound and voiceover direction |
+| Digital products | Web-component specification; interaction pattern |
+| Channels | Channel playbook; content template |
+| Accessibility | Accessibility checklist |
+| Governance | Governance workflow |
+
+A web-component specification covers anatomy, variants, interactive states, content
+rules, responsive behavior, keyboard and focus behavior, validation, empty/loading/
+success/error states where applicable, and accessibility requirements. It does not
+contain executable production component code.
+
 ### Exception
 
 A documented, narrowly scoped, time-bounded departure from one or more rules. It
@@ -479,6 +513,11 @@ The authoring experience shall provide:
 - Section navigation and completion state
 - Complete-draft and section-by-section generation entry points
 - Per-section generation progress, retry, pause, resume, and cancellation controls
+- A live complete-brand-bible view of the current draft, with navigable sections,
+  founding context, narrative guidance, rules, tokens, examples, patterns and
+  playbooks, registered assets, canonical identifiers, revision state, responsive
+  layout, and print styling
+- A clear action on every saved legacy kit to continue into the living-brand workflow
 - Direct narrative editing
 - Typed editors for rules and tokens
 - Section-level regeneration
@@ -1107,6 +1146,18 @@ The foundation is successful when:
 23. Workspace creation accepts optional multiline brand context, preserves its line
     breaks after trimming outer whitespace, rejects empty or over-limit values, and
     applies the stored context consistently to every generated section.
+24. The local owner can open one complete brand bible directly from the workshop
+    without publishing first; it safely renders every canonical draft content type,
+    identifies empty areas, works at mobile widths, and prints without authoring UI.
+25. Generated sections contain at least two narrative blocks, one actionable rule,
+    and contrasting examples; technical implementation sections also contain tokens.
+26. Generated sections include every required pattern kind in the deliverables
+    matrix; a missing kind fails validation and triggers the existing bounded retry.
+27. The complete bible renders each pattern with its labeled specifications, do and
+    do-not guidance, and canonical identity, including explicit say/never-say and
+    web-component content when their sections are generated.
+28. A saved legacy kit clearly identifies itself as a quick concept and offers a
+    keyboard-accessible path to create a living workspace from that exact source kit.
 
 ## 22. Explicit Non-Goals
 

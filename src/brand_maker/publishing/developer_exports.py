@@ -1,4 +1,4 @@
-"""Stable developer-facing projections of canonical tokens, rules, and voice."""
+"""Stable developer-facing projections of canonical implementation guidance."""
 
 import json
 import re
@@ -13,6 +13,7 @@ def _semantic_name(value: str) -> str:
 def export_developer_package(published: PublishedVersion) -> dict[str, str]:
     tokens = [token for section in published.snapshot.sections for token in section.tokens]
     rules = [rule for section in published.snapshot.sections for rule in section.rules]
+    patterns = [pattern for section in published.snapshot.sections for pattern in section.patterns]
     css = [f"/* brand-version: {published.version}; hash: {published.content_hash} */", ":root {"]
     for token in sorted(tokens, key=lambda item: item.id):
         css.append(f"  --brand-{_semantic_name(token.id)}: {token.value};")
@@ -20,6 +21,10 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
     metadata = {"version": published.version, "content_hash": published.content_hash}
     token_payload = {**metadata, "tokens": [item.model_dump(mode="json") for item in tokens]}
     rule_payload = {**metadata, "rules": [item.model_dump(mode="json") for item in rules]}
+    pattern_payload = {
+        **metadata,
+        "patterns": [item.model_dump(mode="json") for item in patterns],
+    }
     voice_sections = [
         section
         for section in published.snapshot.sections
@@ -39,6 +44,10 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
         "tokens.css": "\n".join(css) + "\n",
         "tokens.json": json.dumps(token_payload, sort_keys=True, separators=(",", ":")) + "\n",
         "rules.json": json.dumps(rule_payload, sort_keys=True, separators=(",", ":")) + "\n",
+        "patterns.json": json.dumps(
+            pattern_payload, sort_keys=True, separators=(",", ":")
+        )
+        + "\n",
         "voice-context.json": json.dumps(
             voice_payload, sort_keys=True, separators=(",", ":")
         )

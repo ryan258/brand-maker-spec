@@ -65,6 +65,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'id="editor-status" role="status" aria-live="polite"' in page.text
     assert script.status_code == 200
     assert "fetch(`/api/brand-systems/${encodeURIComponent(brandId)}`)" in script.text
+    assert 'get("sourceBrandId")' in script.text
+    assert "source_brand_id:sourceBrandId||null" in script.text
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
     assert "eval(" not in script.text
