@@ -29,6 +29,7 @@ AssistanceMode = Literal["advisor", "copilot", "autonomous"]
 ResearchMode = Literal["local_only", "controlled"]
 WorkspaceMaturity = Literal["concept", "working", "reviewed", "approved"]
 EvidenceKind = Literal["owner", "project", "external", "model-inference", "professional"]
+EvidencePrivacyState = Literal["private-local", "research-approved"]
 ConfidenceLevel = Literal["low", "medium", "high"]
 VerificationRequirement = Literal[
     "none",
@@ -275,6 +276,7 @@ class EvidenceSource(ContractModel):
     summary: NarrativeText
     locator: str | None = Field(default=None, max_length=4096)
     retrieved_at: datetime
+    privacy_state: EvidencePrivacyState = "private-local"
 
 
 class DecisionRecord(ContractModel):
@@ -480,6 +482,20 @@ class UpdateSectionRequest(ContractModel):
     section: BrandSection
     confirm_locked: bool = False
     change_note: ShortText | None = None
+
+
+class UpdateBriefRequest(ContractModel):
+    expected_revision: int = Field(..., ge=1)
+    brief: WorkspaceBrief
+
+
+class CreateEvidenceRequest(ContractModel):
+    expected_revision: int = Field(..., ge=1)
+    kind: Literal["owner", "project", "external"]
+    title: ShortText
+    summary: NarrativeText
+    locator: str | None = Field(default=None, max_length=4096)
+    privacy_state: EvidencePrivacyState = "private-local"
 
 
 class ValidationIssue(ContractModel):

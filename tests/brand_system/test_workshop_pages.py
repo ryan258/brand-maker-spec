@@ -68,6 +68,11 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert f'data-brand-id="{created["brand_id"]}"' in page.text
     assert '<nav id="section-navigation" aria-label="Brand sections">' in page.text
     assert '<form id="section-form"' in page.text
+    assert '<form id="brief-form"' in page.text
+    assert 'id="brief-objective"' in page.text
+    assert 'data-brief-suggestion="objective"' in page.text
+    assert '<form id="evidence-form"' in page.text
+    assert 'id="evidence-privacy"' in page.text
     assert 'id="editor-status" role="status" aria-live="polite"' in page.text
     assert '<label for="derivative-source">Source raster logo</label>' in page.text
     assert 'id="create-favicon-set" type="button"' in page.text
@@ -86,6 +91,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'createDerivatives("favicon-sets"' in script.text
     assert 'createDerivatives("logo-variant-sets"' in script.text
     assert 'createDerivatives("vectorizations"' in script.text
+    assert '/brief`' in script.text
+    assert '/evidence`' in script.text
     assert styles.status_code == 200
     assert "@media (max-width: 48rem)" in styles.text
     assert "prefers-reduced-motion" in styles.text

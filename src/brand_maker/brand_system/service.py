@@ -1,16 +1,20 @@
 """Application service for local living-brand workspace operations."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from brand_maker.brand_system.editing import preview_section_edit
 from brand_maker.brand_system.models import (
     BrandSection,
     BrandToken,
+    CreateEvidenceRequest,
     CreateWorkspaceRequest,
     EditImpact,
+    EvidenceSource,
     LocalOwner,
     NarrativeBlock,
+    UpdateBriefRequest,
     WorkingDraft,
     WorkspaceBrief,
 )
@@ -128,10 +132,12 @@ class BrandSystemService:
         workspaces: SQLiteBrandSystemRepository,
         legacy: SQLiteBrandRepository,
         id_factory: Callable[[], UUID] = uuid4,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._workspaces = workspaces
         self._legacy = legacy
         self._id_factory = id_factory
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def create(self, request: CreateWorkspaceRequest) -> WorkingDraft:
         source: BrandKit | None = None
@@ -175,6 +181,62 @@ class BrandSystemService:
             sections=_migrated_sections(source) if source is not None else _blank_sections(),
         )
         return self._workspaces.create(draft)
+
+    def replace_brief(self, brand_id: UUID, request: UpdateBriefRequest) -> WorkingDraft:
+        current = self._workspaces.get(brand_id)
+        if current is None:
+            raise WorkspaceNotFound
+        if current.revision != request.expected_revision:
+            raise StaleDraftRevision("draft revision conflict")
+        payload = current.model_dump(mode="json")
+        payload.update(
+            {
+                "brief": request.brief.model_dump(mode="json"),
+                "revision": current.revision + 1,
+                "status": "draft",
+            }
+        )
+        updated = WorkingDraft.model_validate(payload)
+        return self._workspaces.update(
+            updated,
+            expected_revision=current.revision,
+            action="brief.replaced",
+            reason="Incremental structured brief update.",
+        )
+
+    def add_evidence(self, brand_id: UUID, request: CreateEvidenceRequest) -> WorkingDraft:
+        current = self._workspaces.get(brand_id)
+        if current is None:
+            raise WorkspaceNotFound
+        if current.revision != request.expected_revision:
+            raise StaleDraftRevision("draft revision conflict")
+        source = EvidenceSource(
+            id=f"evidence.{self._id_factory().hex}",
+            kind=request.kind,
+            title=request.title,
+            summary=request.summary,
+            locator=request.locator,
+            retrieved_at=self._clock(),
+            privacy_state=request.privacy_state,
+        )
+        payload = current.model_dump(mode="json")
+        payload.update(
+            {
+                "evidence": [
+                    *[item.model_dump(mode="json") for item in current.evidence],
+                    source.model_dump(mode="json"),
+                ],
+                "revision": current.revision + 1,
+                "status": "draft",
+            }
+        )
+        updated = WorkingDraft.model_validate(payload)
+        return self._workspaces.update(
+            updated,
+            expected_revision=current.revision,
+            action="evidence.added",
+            reason=f"Add {source.kind} evidence: {source.title}",
+        )
 
     def replace_section(
         self,

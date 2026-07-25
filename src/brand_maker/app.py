@@ -49,6 +49,7 @@ from brand_maker.brand_system.models import (
     ApprovalRequest,
     AssetRegistration,
     CreateAssetDerivativeRequest,
+    CreateEvidenceRequest,
     CreateWorkspaceRequest,
     EditImpact,
     GenerateLogoRequest,
@@ -58,6 +59,7 @@ from brand_maker.brand_system.models import (
     PublishedVersion,
     RegisterAssetRequest,
     RenderedPublishedVersion,
+    UpdateBriefRequest,
     UpdateSectionRequest,
     WorkingDraft,
     WorkspacePage,
@@ -867,6 +869,38 @@ def create_app(
         if draft is None:
             raise HTTPException(status_code=404, detail="Brand system not found.")
         return draft
+
+    @app.patch(
+        "/api/brand-systems/{brand_id}/brief",
+        response_model=WorkingDraft,
+        tags=["living brand systems"],
+    )
+    async def replace_brand_brief(
+        brand_id: UUID, payload: UpdateBriefRequest, request: Request
+    ) -> WorkingDraft:
+        service = cast(BrandSystemService, request.app.state.brand_system_service)
+        try:
+            return await run_in_threadpool(service.replace_brief, brand_id, payload)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except WorkspaceNotFound:
+            raise HTTPException(status_code=404, detail="Brand system not found.") from None
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/evidence",
+        response_model=WorkingDraft,
+        tags=["living brand systems"],
+    )
+    async def add_brand_evidence(
+        brand_id: UUID, payload: CreateEvidenceRequest, request: Request
+    ) -> WorkingDraft:
+        service = cast(BrandSystemService, request.app.state.brand_system_service)
+        try:
+            return await run_in_threadpool(service.add_evidence, brand_id, payload)
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except WorkspaceNotFound:
+            raise HTTPException(status_code=404, detail="Brand system not found.") from None
 
     @app.get(
         "/api/brand-systems/{brand_id}/backup",

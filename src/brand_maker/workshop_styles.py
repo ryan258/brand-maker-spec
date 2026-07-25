@@ -38,4 +38,8 @@ kbd{font:inherit;font-size:.8rem;border:1px solid var(--line);padding:0 .25rem;b
 .choice-grid legend{font-weight:800;padding:0 .35rem}.choice-card{display:grid!important;grid-template-columns:auto 1fr;align-content:start;gap:.15rem .5rem;padding:.75rem;border:1px solid var(--line);background:var(--paper)}
 .choice-card input{grid-row:1/3;width:auto;padding:0;margin-top:.25rem}.choice-card span{font-size:.8rem;color:var(--muted)}.compact-choices{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (max-width: 48rem){.choice-grid,.compact-choices{grid-template-columns:1fr}}
+.brief-panel{display:grid;gap:1rem;margin:2rem 0;padding:1.25rem;border:2px solid var(--ink);background:var(--surface)}
+.brief-panel>h2,.brief-panel>p{margin:0}.brief-panel form label{display:grid;gap:.25rem}.brief-panel details{display:grid;gap:.75rem;padding:.75rem;border:1px solid var(--line)}
+.brief-panel details[open] summary{margin-bottom:.75rem}.suggestion-row{display:flex;flex-wrap:wrap;gap:.5rem}.suggestion-row button{padding:.45rem .7rem;background:var(--paper);color:var(--ink);font-size:.8rem}
+#evidence-list{display:grid;gap:.35rem;margin:0;padding-left:1.25rem}
 """

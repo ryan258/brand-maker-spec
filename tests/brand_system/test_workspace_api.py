@@ -144,6 +144,52 @@ def test_creation_preserves_entry_assistance_and_research_choices(tmp_path: Path
     }
 
 
+def test_brief_autosave_and_evidence_intake_are_revision_safe(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar Studio", "owner_name": "Ryan"},
+        ).json()
+        brief = created["brief"]
+        brief.update(
+            {
+                "objective": "Make complex project ideas immediately understandable.",
+                "audience": "Independent builders with several active ideas.",
+                "category": "Personal project operating system",
+                "success_measures": ["A new project has a usable brief in ten minutes."],
+            }
+        )
+        saved = api.patch(
+            f"/api/brand-systems/{created['brand_id']}/brief",
+            json={"expected_revision": 1, "brief": brief},
+        )
+        stale = api.patch(
+            f"/api/brand-systems/{created['brand_id']}/brief",
+            json={"expected_revision": 1, "brief": brief},
+        )
+        evidence = api.post(
+            f"/api/brand-systems/{created['brand_id']}/evidence",
+            json={
+                "expected_revision": 2,
+                "kind": "owner",
+                "title": "Founding observation",
+                "summary": "I lose momentum when project positioning stays implicit.",
+                "privacy_state": "private-local",
+            },
+        )
+
+    assert saved.status_code == 200
+    assert saved.json()["revision"] == 2
+    assert saved.json()["brief"]["objective"].startswith("Make complex")
+    assert stale.status_code == 409
+    assert evidence.status_code == 200
+    assert evidence.json()["revision"] == 3
+    assert evidence.json()["evidence"][0]["kind"] == "owner"
+    assert evidence.json()["evidence"][0]["privacy_state"] == "private-local"
+
+
 def test_workspace_audit_undo_and_redo_api(tmp_path: Path) -> None:
     test_client, _ = client(tmp_path)
 

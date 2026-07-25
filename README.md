@@ -44,7 +44,8 @@ available at `/docs`.
 The living-brand workflow is:
 
 1. Create a workspace from a raw idea, named concept, existing project, or saved quick
-   kit, then add whatever founding context is already known.
+   kit, then add whatever founding context is already known. The structured brief saves
+   incrementally and offers starter answers to reduce typing.
 2. Edit sections manually or generate a complete/selected starting point.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
@@ -58,6 +59,10 @@ The living-brand workflow is:
    tokens/rules, canonical archives, or tagged PDF/UA.
 6. Register artifact revisions and run deterministic compliance checks. Unsupported
    checks, model judgment, evidence, and expiring exceptions remain visibly distinct.
+
+Evidence intake records whether a source is an owner statement, project material, or
+external source. Its visible privacy state is either `private-local` or explicitly
+`research-approved`; private-local content does not grant permission for external use.
 
 Saved quick kits remain available in the kit library. Use **Build complete brand
 bible** on a saved kit to preserve it as the exact source of a new living workspace.

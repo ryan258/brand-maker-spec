@@ -14,6 +14,8 @@
   while preserving the saved quick-kit record and compatibility API.
 - Added keyboard-accessible creation choices for raw ideas, named concepts, and
   existing projects, with explicit advisor/copilot/autonomous and research boundaries.
+- Added an incrementally autosaved structured brief with low-typing starter answers,
+  plus evidence intake that preserves source type and visible privacy state.
 
 - **Idea 1:** Moved AI logo generation above the section editor.
 - **Idea 2:** Added inline logo and image thumbnails to the asset list.
