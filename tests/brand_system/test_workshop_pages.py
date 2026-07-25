@@ -40,10 +40,16 @@ def test_workshop_index_has_accessible_creation_and_workspace_regions(
     assert '<form id="workspace-form"' in response.text
     assert '<label for="workspace-name">' in response.text
     assert '<textarea id="brand-context"' in response.text
-    assert 'for="brand-context">Brand context' in response.text
+    assert 'for="brand-context">What do you already know?' in response.text
     assert 'aria-describedby="brand-context-help"' in response.text
     assert 'id="workspace-status" role="status" aria-live="polite"' in response.text
     assert 'id="workspace-list" aria-busy="true"' in response.text
+    for entry_path in ("raw_idea", "named_concept", "existing_project"):
+        assert f'name="entry-path" value="{entry_path}"' in response.text
+    for mode in ("advisor", "copilot", "autonomous"):
+        assert f'name="assistance-mode" value="{mode}"' in response.text
+    assert 'name="research-mode" value="local_only"' in response.text
+    assert 'name="research-mode" value="controlled"' in response.text
     assert 'src="/assets/workshop.js"' in response.text
 
 
@@ -72,6 +78,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert "fetch(`/api/brand-systems/${encodeURIComponent(brandId)}`)" in script.text
     assert 'get("sourceBrandId")' in script.text
     assert "source_brand_id:sourceBrandId||null" in script.text
+    assert 'entry_path:sourceBrandId?"quick_start"' in script.text
+    assert 'document.querySelector(\'input[name="assistance-mode"]:checked\')' in script.text
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
     assert "eval(" not in script.text

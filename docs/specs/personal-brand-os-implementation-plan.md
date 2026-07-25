@@ -15,7 +15,8 @@ changes remain untouched until they can be reconciled deliberately.
 - Complete: Task 2.3 (durable audit history and revision-safe undo/redo APIs).
 - Complete: Task 2.4 (recoverable trash and checksum-bound workspace backups).
 - Complete: Task 3.1 (unified non-parody quick start with compatibility preservation).
-- Next: Tasks 3.2–3.3, structured entry paths and an incremental brand brief.
+- Complete: Task 3.2 (accessible entry-path, assistance, and research choices).
+- Next: Task 3.3, incremental structured brief and evidence intake.
 
 ## Architecture Decisions
 

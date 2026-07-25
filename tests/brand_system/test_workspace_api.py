@@ -109,6 +109,41 @@ def test_create_list_and_get_local_workspace(tmp_path: Path) -> None:
     assert listing.json()["items"][0]["brand_id"] == brand_id
 
 
+def test_creation_preserves_entry_assistance_and_research_choices(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={
+                "brand_name": "Northstar Studio",
+                "owner_name": "Ryan",
+                "entry_path": "raw_idea",
+                "assistance_mode": "autonomous",
+                "research_mode": "local_only",
+            },
+        )
+
+    assert created.status_code == 201
+    assert created.json()["maturity"] == "concept"
+    assert created.json()["brief"] == {
+        "entry_path": "raw_idea",
+        "assistance_mode": "autonomous",
+        "research_mode": "local_only",
+        "objective": None,
+        "audience": None,
+        "category": None,
+        "competitors": [],
+        "differentiators": [],
+        "existing_equity": None,
+        "constraints": [],
+        "stakeholders": [],
+        "locales": [],
+        "success_measures": [],
+        "unresolved_questions": [],
+    }
+
+
 def test_workspace_audit_undo_and_redo_api(tmp_path: Path) -> None:
     test_client, _ = client(tmp_path)
 

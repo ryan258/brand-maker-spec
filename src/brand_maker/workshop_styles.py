@@ -34,4 +34,8 @@ WORKSHOP_CSS += """
 .asset-words{display:grid;gap:.15rem;font-size:.9rem;min-width:0;overflow-wrap:anywhere}
 .asset-thumb{width:3.5rem;height:3.5rem;object-fit:contain;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);padding:.2rem}
 kbd{font:inherit;font-size:.8rem;border:1px solid var(--line);padding:0 .25rem;background:var(--paper)}
+.choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;margin:0;padding:1rem;border:1px solid var(--line)}
+.choice-grid legend{font-weight:800;padding:0 .35rem}.choice-card{display:grid!important;grid-template-columns:auto 1fr;align-content:start;gap:.15rem .5rem;padding:.75rem;border:1px solid var(--line);background:var(--paper)}
+.choice-card input{grid-row:1/3;width:auto;padding:0;margin-top:.25rem}.choice-card span{font-size:.8rem;color:var(--muted)}.compact-choices{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width: 48rem){.choice-grid,.compact-choices{grid-template-columns:1fr}}
 """
