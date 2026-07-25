@@ -3,20 +3,8 @@
 A backlog of concrete improvements for the living brand system. Grounded in what
 exists today: the workshop (sections with prose/rules/tokens/examples/patterns),
 AI generation, asset storage + AI logos, the re-skinning brand bible, compliance,
-and publishing/export. Not prioritized — a menu, not a plan.
-
-## Authoring UX
-
-1. Move the "Generate a logo with AI" panel up so it isn't buried below the section editor.
-2. Inline logo/image thumbnails in the asset list instead of a text-only line.
-3. Autosave section edits on a debounce instead of only on "Save section".
-4. Unsaved-changes warning when navigating away from a dirty section.
-5. Drag-to-reorder for paragraphs, rules, examples, and patterns within a section.
-6. Duplicate an existing rule/token/example/pattern as a starting point.
-7. Keyboard shortcuts: ⌘S to save, ⌘Enter to add another item.
-8. A per-section completeness meter (how many content types are populated).
-9. Collapse/expand each content group (Prose, Rules, Tokens…) to reduce scroll.
-10. A live word/character count on narrative fields near their limits.
+and publishing/export. Not prioritized — a menu, not a plan. Completed ideas retain
+their original numbers in `changelog.md`.
 
 ## AI & Generation
 
@@ -33,9 +21,6 @@ and publishing/export. Not prioritized — a menu, not a plan.
 
 ## Assets & Media
 
-21. Generate favicon/app-icon crops from an uploaded or generated logo.
-22. AI logo variants: monochrome, inverted, horizontal lockup, icon-only.
-23. Vectorize a raster logo to SVG (clean, scalable) after generation.
 24. Background removal / transparency for uploaded logos.
 25. Font upload + automatic `@font-face` wiring into the bible preview.
 26. Detect and warn on low-resolution or oversized image uploads.
@@ -92,19 +77,13 @@ and publishing/export. Not prioritized — a menu, not a plan.
 65. Flag rules with no examples (guidance that's never demonstrated).
 66. Accessibility audit of the token palette (WCAG contrast pairs).
 67. Readability grade for narrative prose against a target reading level.
-68. Link-check references between sections (broken canonical IDs).
-69. A compliance exception request flow surfaced in the UI, not just the API.
 70. Scheduled re-checks that email the owner when an asset drifts.
 
 ## Publishing & Export
 
-71. One-click export to PDF, Markdown, and a zipped archive from the bible.
-72. Export design tokens as CSS variables, Tailwind config, and JSON.
 73. Figma-ready token export (Design Tokens Community Group format).
 74. Export a starter component library (buttons, type scale) from tokens.
 75. Publish to a static site (Netlify/Vercel) with one click.
-76. Versioned public releases with semantic version tags.
-77. "Brand kit" download: logos, fonts, colors, and PDF in one bundle.
 78. Import an existing brand from a PDF or a set of assets.
 79. Scheduled auto-publish when all sections reach "approved".
 80. Webhook on publish so downstream systems can sync.
@@ -132,5 +111,4 @@ and publishing/export. Not prioritized — a menu, not a plan.
 96. Multi-language brand bibles (translate sections, keep tokens shared).
 97. Template marketplace: publish and reuse section/pattern templates.
 98. Billing/plan tiers gating generation credits and collaborators.
-99. Mobile-responsive workshop (the editor is desktop-first today).
 100. A "brand diff against a competitor" report for positioning workshops.

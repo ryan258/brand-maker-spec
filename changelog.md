@@ -1,0 +1,29 @@
+# Changelog
+
+## Unreleased
+
+### Added
+
+- **Idea 1:** Moved AI logo generation above the section editor.
+- **Idea 2:** Added inline logo and image thumbnails to the asset list.
+- **Idea 3:** Added debounced section autosave.
+- **Idea 4:** Added dirty-navigation warnings for unsaved section edits.
+- **Idea 5:** Added drag and button-based reordering for section content.
+- **Idea 6:** Added duplication controls for existing section content.
+- **Idea 7:** Added keyboard shortcuts for saving and inserting content.
+- **Idea 8:** Added a per-section content-completeness meter.
+- **Idea 9:** Made Prose, Rules, Tokens, Examples, and Patterns collapsible.
+- **Idea 10:** Added live word and character counts to narrative fields.
+- **Idea 21:** Added favicon and app-icon crops for raster logos.
+- **Idea 22:** Added AI-generated monochrome, inverted, horizontal-lockup, and
+  icon-only logo variants.
+- **Idea 23:** Added local raster-to-SVG logo vectorization.
+- **Idea 68:** Added canonical validation for broken cross-section references.
+- **Idea 69:** Added a browser workflow for visible, expiring compliance exceptions
+  and supporting evidence.
+- **Idea 71:** Added direct PDF, Markdown, and ZIP export actions to the brand bible.
+- **Idea 72:** Added CSS custom-property, Tailwind, and JSON token exports.
+- **Idea 76:** Added immutable, semantically versioned brand releases.
+- **Idea 77:** Added downloadable brand-kit bundles with the bible, tokens, and
+  registered production assets.
+- **Idea 99:** Added responsive single-column workshop layouts and wrapping controls.

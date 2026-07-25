@@ -155,7 +155,7 @@ from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
 from brand_maker.workshop_styles import WORKSHOP_CSS
 from brand_maker.workshop_ui import WORKSHOP_SCRIPT
-from brand_maker.workshop_web import add_derivative_tools, workspace_detail, workspace_index
+from brand_maker.workshop_web import workspace_detail, workspace_index
 
 logger = logging.getLogger(__name__)
 
@@ -506,9 +506,7 @@ def create_app(
         store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
         if await run_in_threadpool(store.get, brand_id) is None:
             raise HTTPException(status_code=404, detail="Brand system not found.")
-        return HTMLResponse(
-            add_derivative_tools(workspace_detail(brand_id)), headers=BROWSER_HEADERS
-        )
+        return HTMLResponse(workspace_detail(brand_id), headers=BROWSER_HEADERS)
 
     @app.get(
         "/brand-systems/{brand_id}/bible",
@@ -1014,6 +1012,36 @@ def create_app(
             ) from None
         finally:
             temporary.unlink(missing_ok=True)
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/assets/{asset_id}/content",
+        include_in_schema=False,
+    )
+    async def read_brand_asset(brand_id: UUID, asset_id: str, request: Request) -> Response:
+        """Serve one registered asset's bytes so the workshop can show thumbnails."""
+
+        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        assets = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        asset = next((item for item in draft.assets if item.id == asset_id), None)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="Asset not found.")
+        try:
+            content = await run_in_threadpool(assets.read, asset)
+        except (AssetMissing, AssetChanged, ValueError):
+            raise HTTPException(status_code=404, detail="Asset content unavailable.") from None
+        # Uploaded SVG can carry script; sandbox it so direct navigation can't run it.
+        return Response(
+            content,
+            media_type=asset.media_type,
+            headers={
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+            },
+        )
 
     @app.post(
         "/api/brand-systems/{brand_id}/assets/{asset_id}/favicon-sets",

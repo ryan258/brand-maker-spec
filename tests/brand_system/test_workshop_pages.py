@@ -81,3 +81,48 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert styles.status_code == 200
     assert "@media (max-width: 48rem)" in styles.text
     assert "prefers-reduced-motion" in styles.text
+
+
+def test_workshop_authoring_affordances_are_present(tmp_path: Path) -> None:
+    with app_client(tmp_path) as client:
+        created = client.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()
+        page = client.get(f"/brand-systems/{created['brand_id']}")
+        script = client.get("/assets/workshop.js")
+
+    # The logo generator must sit above the section editor, not below it.
+    assert page.text.index('id="logo-form"') < page.text.index('id="section-form"')
+    assert '<details class="content-group" open data-add="add-paragraph">' in page.text
+    assert '<progress id="section-completeness" max="5" value="0"' in page.text
+    for group in ("block", "rule", "token", "example", "pattern"):
+        assert f'id="count-{group}-editors"' in page.text
+    assert 'thumb.className="asset-thumb"' in script.text
+    assert "Duplicate" in script.text
+    assert "Move up" in script.text
+    assert "dragstart" in script.text
+
+
+def test_asset_content_is_served_sandboxed_for_thumbnails(tmp_path: Path) -> None:
+    png = b"\x89PNG\r\n\x1a\n" + b"pixels"
+
+    with app_client(tmp_path) as client:
+        brand_id = client.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        asset = client.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Primary logo", "required": "true"},
+            files={"file": ("logo.png", png, "image/png")},
+        ).json()["assets"][0]
+        served = client.get(f"/api/brand-systems/{brand_id}/assets/{asset['id']}/content")
+        missing = client.get(f"/api/brand-systems/{brand_id}/assets/asset.nope/content")
+
+    assert served.status_code == 200
+    assert served.content == png
+    assert served.headers["content-type"] == "image/png"
+    assert served.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert served.headers["x-content-type-options"] == "nosniff"
+    assert missing.status_code == 404
