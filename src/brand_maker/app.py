@@ -185,6 +185,27 @@ def _safe_zip_filename(name: str) -> str:
 
 
 def _build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
+    if len(draft.assets) > MAX_ENTRIES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Brand kit contains too many asset entries (max {MAX_ENTRIES}).",
+        )
+
+    total_declared = sum(asset.size_bytes for asset in draft.assets)
+    if total_declared > MAX_ARCHIVE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Brand kit assets exceed maximum archive size limit of 250 MB.",
+        )
+
+    for asset in draft.assets:
+        if asset.size_bytes > MAX_ENTRY_BYTES and asset.required:
+            detail = (
+                f"Required asset '{asset.name}' exceeds maximum "
+                "single file size of 25 MB."
+            )
+            raise HTTPException(status_code=413, detail=detail)
+
     token_exports = export_draft_tokens(draft)
     html_content = render_brand_bible(draft, for_pdf=True)
     pdf_bytes = render_html_pdf(html_content)
@@ -217,20 +238,8 @@ def _build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
         _write_entry(f"{safe_brand}-bible.md", md_text.encode("utf-8"))
         _write_entry(f"{safe_brand}-bible.pdf", pdf_bytes)
 
-        if len(draft.assets) > MAX_ENTRIES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Brand kit contains too many asset entries (max {MAX_ENTRIES}).",
-            )
-
         for asset in draft.assets:
             if asset.size_bytes > MAX_ENTRY_BYTES:
-                if asset.required:
-                    detail = (
-                        f"Required asset '{asset.name}' exceeds maximum "
-                        "single file size of 25 MB."
-                    )
-                    raise HTTPException(status_code=413, detail=detail)
                 continue
 
             try:

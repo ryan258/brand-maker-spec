@@ -7,26 +7,42 @@ from brand_maker.brand_system.models import PublishedVersion, WorkingDraft
 
 
 def _semantic_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9-]+", "-", value.casefold().replace(".", "-")).strip("-")
+    cleaned = value.casefold().replace(".", "-")
+    cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned).strip("-")
+    return cleaned or "token"
 
 
 def export_draft_tokens(draft: WorkingDraft) -> dict[str, str]:
+    safe_css_brand = re.sub(r"[\r\n]+", " ", draft.brand_name).replace("*/", "* /")
+    safe_js_brand = re.sub(r"[\r\n]+", " ", draft.brand_name)
+
     tokens = [token for section in draft.sections for token in section.tokens]
-    css = [f"/* brand-system: {draft.brand_name} (draft) */", ":root {"]
+    css = [f"/* brand-system: {safe_css_brand} (draft) */", ":root {"]
     colors: dict[str, str] = {}
     fonts: dict[str, str] = {}
-    other_tokens: dict[str, str] = {}
+    spacing: dict[str, str] = {}
+    durations: dict[str, str] = {}
+    seen_keys: dict[str, int] = {}
 
     for token in sorted(tokens, key=lambda item: item.id):
-        key = _semantic_name(token.id)
+        base_key = _semantic_name(token.id)
+        if base_key in seen_keys:
+            seen_keys[base_key] += 1
+            key = f"{base_key}_{seen_keys[base_key]}"
+        else:
+            seen_keys[base_key] = 0
+            key = base_key
+
         val = str(token.value)
         css.append(f"  --brand-{key}: {val};")
         if token.value_type == "color":
             colors[key] = val
         elif token.value_type == "font":
             fonts[key] = val
-        else:
-            other_tokens[key] = val
+        elif token.value_type == "dimension":
+            spacing[key] = val
+        elif token.value_type == "duration":
+            durations[key] = val
     css.append("}")
 
     token_payload = {
@@ -36,17 +52,19 @@ def export_draft_tokens(draft: WorkingDraft) -> dict[str, str]:
         "tokens": [item.model_dump(mode="json") for item in tokens],
     }
 
-    tailwind_config = {
-        "theme": {
-            "extend": {
-                "colors": colors,
-                "fontFamily": fonts,
-                "spacing": other_tokens,
-            }
-        }
-    }
+    extend_theme: dict[str, dict[str, str]] = {}
+    if colors:
+        extend_theme["colors"] = colors
+    if fonts:
+        extend_theme["fontFamily"] = fonts
+    if spacing:
+        extend_theme["spacing"] = spacing
+    if durations:
+        extend_theme["transitionDuration"] = durations
+
+    tailwind_config = {"theme": {"extend": extend_theme}}
     tailwind_js = (
-        f"// Generated Tailwind CSS theme extension for {draft.brand_name}\n"
+        f"// Generated Tailwind CSS theme extension for {safe_js_brand}\n"
         f"module.exports = {json.dumps(tailwind_config, indent=2)};\n"
     )
 

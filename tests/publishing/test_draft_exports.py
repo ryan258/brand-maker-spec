@@ -2,7 +2,7 @@ import io
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
@@ -231,3 +231,95 @@ def test_render_brand_bible_pdf_and_csp() -> None:
     assert '<div class="cover-actions">' not in pdf_html
     assert "workshop.js" not in pdf_html
     assert "<style>" in pdf_html
+
+
+def test_comment_injection_and_token_mappings() -> None:
+    draft = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Rocket\nmodule.exports.hack = 1; */",
+        owner=LocalOwner(display_name="Tester"),
+        revision=1,
+        sections=[
+            BrandSection(
+                id="section.tokens",
+                title="Tokens",
+                status="draft",
+                tokens=[
+                    BrandToken(
+                        id="token.foo_bar",
+                        name="Foo Underscore",
+                        value_type="dimension",
+                        value="16px",
+                    ),
+                    BrandToken(
+                        id="token.foo-bar",
+                        name="Foo Dash",
+                        value_type="duration",
+                        value="200ms",
+                    ),
+                    BrandToken(
+                        id="token.flag",
+                        name="Flag",
+                        value_type="boolean",
+                        value="True",
+                    ),
+                ],
+            )
+        ],
+    )
+
+    exports = export_draft_tokens(draft)
+
+    # Comment injection prevention
+    assert "\nmodule.exports.hack" not in exports["tailwind.config.js"]
+    header_line = exports["tokens.css"].split("\n")[0]
+    comment_body = header_line.removeprefix("/* brand-system: ").removesuffix(" (draft) */")
+    assert "*/" not in comment_body
+
+    # Token ID distinction and type mappings
+    assert "--brand-token-foo_bar: 16px;" in exports["tokens.css"]
+    assert "--brand-token-foo-bar: 200ms;" in exports["tokens.css"]
+    assert '"token-foo_bar": "16px"' in exports["tailwind.config.js"]
+    assert '"token-foo-bar": "200ms"' in exports["tailwind.config.js"]
+    # Boolean boolean flag token is in CSS/JSON but NOT in Tailwind spacing
+    assert '"flag"' not in exports["tailwind.config.js"]
+
+
+def test_early_archive_limit_check() -> None:
+    from brand_maker.brand_system.models import AssetRegistration
+
+    with TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "test.db"
+        settings = Settings(database_path=db_path, openrouter_api_key="test-key")
+        app = create_app(settings=settings)
+
+        with TestClient(app) as api:
+            create_res = api.post(
+                "/api/brand-systems",
+                json={"brand_name": "Large Brand", "owner_name": "Tester"},
+            )
+            brand_id = create_res.json()["brand_id"]
+
+            repo = app.state.brand_system_repository
+            draft = repo.get(UUID(brand_id))
+            assert draft is not None
+            # Add a huge declared asset
+            draft.assets.append(
+                AssetRegistration(
+                    id="asset.huge",
+                    name="huge.zip",
+                    storage="linked",
+                    media_type="application/zip",
+                    size_bytes=300_000_000,
+                    content_hash="b" * 64,
+                    source_path="/tmp/huge.zip",
+                    required=True,
+                )
+            )
+            draft.revision = 2
+            repo.update(draft, expected_revision=1)
+
+            kit_res = api.get(f"/api/brand-systems/{brand_id}/draft-exports/kit")
+            assert kit_res.status_code == 413
+            assert "250 MB" in kit_res.json()["detail"]
+
