@@ -270,4 +270,8 @@ def test_brand_bible_route_reads_current_draft_and_workshop_links_to_it(
     assert "@media(max-width:40rem)" in bible_styles.text
     assert "@media print" in bible_styles.text
     assert 'document.getElementById("print-bible")' in workshop_script.text
+    assert 'id="toggle-bible-theme"' in bible.text
+    assert "IntersectionObserver" in workshop_script.text
+    assert 'setAttribute("aria-current","true")' in workshop_script.text
+    assert 'dataset.previewTheme="dark"' in workshop_script.text
     assert missing.status_code == 404

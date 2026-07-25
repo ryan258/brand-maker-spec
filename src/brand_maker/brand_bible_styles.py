@@ -9,4 +9,7 @@ BRAND_BIBLE_CSS = r"""
 
 BRAND_BIBLE_CSS += r"""
 .pattern-list{display:grid;gap:1.25rem}.pattern-card{padding:clamp(1rem,3vw,2rem);border:2px solid var(--ink);background:#faf7ef}.pattern-card h4{font:600 1.35rem/1.2 var(--font-display)}.pattern-summary{max-width:55rem}.pattern-specifications{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:1.5rem 0;background:var(--line);border:1px solid var(--line)}.pattern-specifications div{padding:1rem;background:var(--surface)}.pattern-specifications dt{font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.pattern-specifications dd{margin:.35rem 0 0}.guidance-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.guidance-pair section{padding:1rem;border-top:4px solid var(--good);background:var(--surface)}.guidance-pair section:last-child{border-top-color:var(--bad)}.guidance-pair h5{margin:0;font-size:1rem}.guidance-pair ul{margin-bottom:0;padding-left:1.25rem}@media(max-width:40rem){.pattern-specifications,.guidance-pair{grid-template-columns:1fr}}@media print{.pattern-card{break-inside:avoid;background:white}}
+.bible-nav a[aria-current="true"]{margin-left:-.65rem;padding-left:.5rem;border-left:.2rem solid var(--accent);font-weight:800}
+[data-preview-theme="dark"] .guidance-block,[data-preview-theme="dark"] .pattern-card{background:var(--surface)}
+@media print{:root[data-preview-theme="dark"]{--paper:white!important;--surface:white!important;--ink:#000!important;--line:#555!important;--muted:#444!important}}
 """

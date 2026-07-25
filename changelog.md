@@ -31,6 +31,10 @@
 - **Idea 22:** Added AI-generated monochrome, inverted, horizontal-lockup, and
   icon-only logo variants.
 - **Idea 23:** Added local raster-to-SVG logo vectorization.
+- **Idea 31:** Added a reversible dark-mode bible preview derived from the brand's
+  current paper and ink tokens, while keeping print output light.
+- **Idea 34:** Added reduced-motion-safe active table-of-contents tracking as the
+  reader moves through the brand bible.
 - **Idea 58:** Added a durable local audit feed with changed fields and optional
   owner rationale for canonical edits.
 - **Idea 68:** Added canonical validation for broken cross-section references.

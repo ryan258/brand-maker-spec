@@ -37,10 +37,8 @@ Completed ideas retain their original numbers in `changelog.md`.
 
 ## The Brand Bible (output)
 
-31. **Build** — Dark-mode preview using the brand's own tokens.
 32. **Defer** — Expiring public preview links require a future sharing boundary.
 33. **Adapt** — Personal decision/review notes anchored to bible sections.
-34. **Build** — Highlight the current table-of-contents section on scroll.
 35. **Build** — Print-tuned page breaks and running PDF headers.
 36. **Build** — Render color chips, contrast pairs, and font specimens inline.
 37. **Build** — Render examples as styled before/after and contextual cards.

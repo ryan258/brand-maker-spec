@@ -49,7 +49,8 @@ The living-brand workflow is:
 2. Edit sections manually or generate a complete/selected starting point.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
-   assets; print it or save it as PDF directly from the browser. Patterns include
+   assets; preview its brand-token dark mode, follow the active table of contents,
+   print it, or save it as PDF directly from the browser. Patterns include
    say/never-say guidance, message systems, web-component specifications and states,
    type scales, layout templates, channel playbooks, and governance workflows.
 4. Review dependencies and the local audit feed, undo or redo revision-safe edits,
