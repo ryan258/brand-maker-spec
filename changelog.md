@@ -10,6 +10,8 @@
   provenance, confidence explanation, prompt version, model, and generation-run identity.
 - Added maturity-aware readiness reports and blocked approval/publication of empty or
   materially incomplete brand systems.
+- Made every successful browser quick start create a concept-stage living workspace
+  while preserving the saved quick-kit record and compatibility API.
 
 - **Idea 1:** Moved AI logo generation above the section editor.
 - **Idea 2:** Added inline logo and image thumbnails to the asset list.
@@ -39,3 +41,5 @@
 
 - Reframed the product as a personal brand operating system rather than a parody-only
   generator; legacy quick-kit fields remain available for compatibility.
+- Replaced parody-oriented homepage, library, generation, and evaluation language with
+  broad original-brand positioning.

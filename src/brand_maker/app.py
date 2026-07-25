@@ -442,7 +442,7 @@ def create_app(
         version="0.1.0",
         description=(
             "Create, publish, export, and check local living brand systems; "
-            "the original parody-kit API remains compatible."
+            "the original quick-kit API remains compatible."
         ),
         docs_url=None,
         redoc_url=None,
@@ -582,9 +582,21 @@ def create_app(
             raise RuntimeError("successful generation did not contain a kit")
         store = cast(SQLiteBrandRepository, request.app.state.repository)
         saved = await run_in_threadpool(store.save, result.kit)
+        brand_systems = cast(BrandSystemService, request.app.state.brand_system_service)
+        workspace = await run_in_threadpool(
+            brand_systems.create,
+            CreateWorkspaceRequest(
+                source_brand_id=saved.id,
+                owner_name="Local owner",
+                entry_path="quick_start",
+                assistance_mode="copilot",
+                research_mode="controlled",
+            ),
+        )
         return SavedBrandGeneration(
             status="ok",
             id=saved.id,
+            workspace_id=workspace.brand_id,
             created_at=saved.created_at,
             kit=saved.kit,
         )

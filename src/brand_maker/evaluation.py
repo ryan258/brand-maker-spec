@@ -1,4 +1,4 @@
-# ruff: noqa: E501 - The specification requires the judge instruction verbatim.
+# ruff: noqa: E501 - Keep the judge rubric readable as authored.
 """Deterministic and LLM-judge evaluation for generated brand responses."""
 
 import argparse
@@ -16,7 +16,7 @@ from brand_maker.json_extract import extract_json_object
 from brand_maker.models import BrandKit, BrandResponse, ContractModel
 from brand_maker.openrouter import OpenRouterClient, ProviderError
 
-JUDGE_SYSTEM_INSTRUCTION = """You are a strict brand-kit evaluator. You score ONE parody brand kit.
+JUDGE_SYSTEM_INSTRUCTION = """You are a strict brand-kit evaluator. You score ONE original brand starting point.
 
 You are given:
 - The original brand name.
@@ -24,7 +24,8 @@ You are given:
 
 Score the kit from 1 to 5 on each of these four rubric items:
 
-1. PARODY CLARITY — Is the parody target obvious and is the joke clear?
+1. POSITIONING CLARITY — Is the category or convention this brand reacts against clear,
+   and does the concept occupy a distinct, credible position?
 2. VOICE CONSISTENCY — Do tagline, description, voice, and personality all match one clear character?
 3. COLOR FIT — Does the palette suit the brand's tone? Are all four roles distinct?
 4. USABILITY — Could a designer use this kit as-is with no rewrite?
@@ -34,7 +35,8 @@ Rules:
 - Do not reward length. Reward sharpness and consistency.
 - If any required field is empty or generic filler, cap that item at 2.
 
-Return ONLY this JSON, nothing else:
+For API compatibility, put the positioning-clarity score in the legacy
+`parody_clarity` key. Return ONLY this JSON, nothing else:
 {
   "parody_clarity": <1-5>,
   "voice_consistency": <1-5>,

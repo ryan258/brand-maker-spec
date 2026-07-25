@@ -22,7 +22,7 @@ class BrandRequest(ContractModel):
         ...,
         min_length=1,
         max_length=80,
-        description="The parody brand name to build a full kit for.",
+        description="The brand name to develop into a quick concept-stage kit.",
     )
 
 
@@ -40,7 +40,9 @@ class BrandKit(ContractModel):
 
     brand_name: str = Field(..., min_length=1)
     parody_target: str = Field(
-        ..., min_length=1, description="The real brand being parodied."
+        ...,
+        min_length=1,
+        description="Legacy field containing the positioning reference or category.",
     )
     tagline: str = Field(..., min_length=1, max_length=120)
     description: str = Field(..., min_length=1, max_length=500)
@@ -112,13 +114,14 @@ class SavedBrandGeneration(ContractModel):
 
     status: Literal["ok", "refused", "error"]
     id: UUID | None = None
+    workspace_id: UUID | None = None
     created_at: datetime | None = None
     kit: BrandKit | None = None
     message: str | None = None
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
-        saved_fields = (self.id, self.created_at, self.kit)
+        saved_fields = (self.id, self.workspace_id, self.created_at, self.kit)
         if self.status == "ok" and (any(value is None for value in saved_fields) or self.message):
             raise ValueError("ok generations require a saved brand and no message")
         has_saved_fields = any(value is not None for value in saved_fields)

@@ -46,7 +46,7 @@ function brandCard(brand) {
   const link = element("a", "brand-card-link");
   link.href = `/brands/${encodeURIComponent(brand.id)}`;
   link.append(paletteStrip(brand.color_palette));
-  link.append(element("p", "card-target", `Parody of ${brand.parody_target}`));
+  link.append(element("p", "card-target", "Quick brand starting point"));
   link.append(element("h2", "", brand.brand_name));
   link.append(element("p", "card-tagline", brand.tagline));
   const foot = element("div", "card-foot");
@@ -105,7 +105,7 @@ async function loadLibrary() {
       root.append(messageState(
         "empty",
         hasBrands ? "No brands on this page" : "No brands yet",
-        hasBrands ? "Return to the beginning of your collection." : "Generate your first brand kit and it will appear here automatically.",
+        hasBrands ? "Return to the beginning of your collection." : "Generate a quick brand starting point and it will appear here automatically.",
         hasBrands ? "Go to the first page" : "Create your first brand",
         hasBrands ? "/brands" : "/#brand-form",
       ));
@@ -162,7 +162,7 @@ function renderDetail(saved) {
   label.append(element("span", "", "Saved brand kit"));
   const title = element("h1", "", kit.brand_name);
   title.id = "detail-title";
-  heading.append(label, title, element("p", "detail-target", `A parody of ${kit.parody_target} · Saved ${displayDate(saved.created_at)}`));
+  heading.append(label, title, element("p", "detail-target", `Quick starting point · Saved ${displayDate(saved.created_at)}`));
   const actions = element("div", "detail-actions");
   const copy = element("button", "quiet-button", "Copy JSON");
   copy.type = "button";

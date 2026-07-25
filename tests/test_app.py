@@ -38,6 +38,8 @@ def test_root_is_an_accessible_getting_started_page() -> None:
     assert "OPENROUTER_API_KEY" in response.text
     assert "POST /brand" in response.text
     assert "identity, voice, personality, and color" in response.text
+    assert "personal brand operating system" in response.text.lower()
+    assert "parody" not in response.text.lower()
     assert "test-key" not in response.text
     assert '<form id="brand-form"' in response.text
     assert 'input id="brand-name"' in response.text
@@ -59,6 +61,7 @@ def test_generation_ui_script_is_served_without_html_injection_apis() -> None:
     assert response.headers["content-type"].startswith("text/javascript")
     assert 'fetch("/api/brands"' in response.text
     assert "view-saved-brand" in response.text
+    assert "A parody of" not in response.text
     assert "textContent" in response.text
     assert "innerHTML" not in response.text
     assert "eval(" not in response.text

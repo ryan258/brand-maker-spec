@@ -2,7 +2,7 @@
 
 import json
 
-SYSTEM_PROMPT = """You create sharp, lighthearted parody brand systems.
+SYSTEM_PROMPT = """You create sharp, original brand starting points.
 Return ONLY one JSON object with exactly these fields:
 {
   "brand_name": "string",
@@ -18,12 +18,15 @@ Return ONLY one JSON object with exactly these fields:
     "background": "#RRGGBB"
   }
 }
-Invent the parody target, concept, voice, and colors. Keep the requested brand_name
-exactly unchanged. Make the joke obvious, the voice internally consistent, all four
-colors distinct, and the result useful to a designer. Do not include markdown."""
+The legacy parody_target field must contain a concise positioning reference: the
+category, convention, or alternative this brand reacts against. It may be a category,
+behavior, assumption, or company. Invent a specific concept, voice, and colors. Keep the
+requested brand_name exactly unchanged. Make the positioning clear, the voice internally
+consistent, all four colors distinct, and the result useful as a concept-stage draft.
+Do not include markdown."""
 
 SAFETY_REPHRASE = (
-    "Build a lighthearted parody brand kit. Avoid protected or harmful content. "
+    "Build an original, non-infringing brand starting point. Avoid protected or harmful content. "
 )
 
 

@@ -41,20 +41,36 @@ def brand_kit(name: str = "Floogle") -> BrandKit:
 
 def test_create_brand_saves_success_and_exposes_full_detail(tmp_path: Path) -> None:
     pipeline = FakePipeline(BrandResponse(status="ok", kit=brand_kit()))
-    store = SQLiteBrandRepository(tmp_path / "brands.db")
-    settings = Settings(_env_file=None, openrouter_api_key="test-key")
+    path = tmp_path / "brands.db"
+    store = SQLiteBrandRepository(path)
+    settings = Settings(
+        _env_file=None, openrouter_api_key="test-key", database_path=path
+    )
 
     with TestClient(
         create_app(settings=settings, pipeline=pipeline, repository=store)
     ) as client:
         created = client.post("/api/brands", json={"brand_name": "Floogle"})
         brand_id = created.json()["id"]
+        workspace_id = created.json()["workspace_id"]
         detail = client.get(f"/api/brands/{brand_id}")
+        workspace = client.get(f"/api/brand-systems/{workspace_id}")
+        reopened = client.post(
+            "/api/brand-systems",
+            json={"owner_name": "Ryan", "source_brand_id": brand_id},
+        )
 
     assert created.status_code == 200
     assert created.json()["status"] == "ok"
     assert UUID(brand_id)
     assert created.json()["kit"]["brand_name"] == "Floogle"
+    assert UUID(workspace_id)
+    assert workspace.status_code == 200
+    assert workspace.json()["source_brand_id"] == brand_id
+    assert workspace.json()["maturity"] == "concept"
+    assert workspace.json()["brief"]["entry_path"] == "quick_start"
+    assert reopened.status_code == 201
+    assert reopened.json()["brand_id"] == workspace_id
     assert detail.status_code == 200
     assert detail.json()["id"] == brand_id
     assert detail.json()["kit"]["tagline"] == "Search less. Guess more."
@@ -77,6 +93,7 @@ def test_create_brand_does_not_save_terminal_failure(tmp_path: Path) -> None:
     assert created.json() == {
         "status": "error",
         "id": None,
+        "workspace_id": None,
         "created_at": None,
         "kit": None,
         "message": "Model provider unavailable.",

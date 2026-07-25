@@ -4,7 +4,7 @@ A local-first personal brand operating system for turning raw ideas, named conce
 and existing projects into researched, versioned living brands. It supports structured
 editing, resumable generation, approval and immutable publication, audience guides,
 portable exports, and evidence-rich brand compliance. The fast one-name generator is
-being unified as a quick entry path into the same durable workspace.
+a quick entry path into the same durable workspace.
 
 The approved product direction and implementation sequence live in
 [`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md) and
@@ -60,6 +60,7 @@ The living-brand workflow is:
 
 Saved quick kits remain available in the kit library. Use **Build complete brand
 bible** on a saved kit to preserve it as the exact source of a new living workspace.
+New quick-start generations create a concept-stage living workspace automatically.
 The older quick-kit schema retains a `parody_target` field for stored-data and API
 compatibility, but parody is no longer the product's positioning or creative limit.
 

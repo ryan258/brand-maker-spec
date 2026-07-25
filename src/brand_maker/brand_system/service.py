@@ -135,6 +135,9 @@ class BrandSystemService:
             saved = self._legacy.get(request.source_brand_id)
             if saved is None:
                 raise SourceBrandNotFound
+            existing = self._workspaces.get_by_source_brand_id(request.source_brand_id)
+            if existing is not None:
+                return existing
             source = saved.kit
         if source is not None:
             brand_name = source.brand_name
@@ -146,7 +149,11 @@ class BrandSystemService:
             brand_id=self._id_factory(),
             source_brand_id=request.source_brand_id,
             brand_name=brand_name,
-            brand_context=request.brand_context,
+            brand_context=(
+                request.brand_context
+                if request.brand_context is not None
+                else (source.description if source is not None else None)
+            ),
             owner=LocalOwner(display_name=request.owner_name),
             revision=1,
             maturity=(

@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS brand_system_workspaces (
 );
 CREATE INDEX IF NOT EXISTS brand_system_workspaces_updated
 ON brand_system_workspaces (updated_at DESC, brand_id DESC);
+CREATE INDEX IF NOT EXISTS brand_system_workspaces_source_brand
+ON brand_system_workspaces (json_extract(draft_json, '$.source_brand_id'))
+WHERE json_extract(draft_json, '$.source_brand_id') IS NOT NULL;
 """
 
 
@@ -102,6 +105,22 @@ class SQLiteBrandSystemRepository:
             row = connection.execute(
                 "SELECT draft_json FROM brand_system_workspaces WHERE brand_id = ?",
                 (str(brand_id),),
+            ).fetchone()
+        return WorkingDraft.model_validate_json(row[0]) if row is not None else None
+
+    def get_by_source_brand_id(self, source_brand_id: UUID) -> WorkingDraft | None:
+        """Return the canonical workspace previously created from a saved kit."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT draft_json
+                FROM brand_system_workspaces
+                WHERE json_extract(draft_json, '$.source_brand_id') = ?
+                ORDER BY created_at ASC, brand_id ASC
+                LIMIT 1
+                """,
+                (str(source_brand_id),),
             ).fetchone()
         return WorkingDraft.model_validate_json(row[0]) if row is not None else None
 

@@ -287,16 +287,16 @@ HOME_PAGE = """<!doctype html>
       <div class="shell hero-grid">
         <div>
           <p class="eyebrow"><span>Local tool · AI assisted</span></p>
-          <h1>One name in. One brand world out.</h1>
-          <p class="hero-copy">Brand System Maker turns a parody brand name into a structured, validated kit with identity, voice, personality, and color direction.</p>
-          <div class="actions"><a class="button" href="/docs">Open the API console</a><a class="button secondary" href="#quick-start">Follow the quick start</a></div>
+          <h1>Every idea deserves a world.</h1>
+          <p class="hero-copy">Your local personal brand operating system develops raw ideas, named concepts, and existing projects into durable identity, voice, personality, and color systems.</p>
+          <div class="actions"><a class="button" href="/brand-systems">Open living brands</a><a class="button secondary" href="#brand-form">Try a one-name quick start</a></div>
         </div>
         <aside class="generator" aria-labelledby="generator-heading">
-          <div class="generator-header"><strong id="generator-heading">Generate a brand kit</strong><span>One name is all it takes.</span></div>
+          <div class="generator-header"><strong id="generator-heading">Generate a quick starting point</strong><span>One name is all it takes.</span></div>
           <form id="brand-form">
-            <label for="brand-name">Parody brand name</label>
-            <input id="brand-name" name="brand_name" type="text" required maxlength="80" autocomplete="off" placeholder="Try Floogle" aria-describedby="name-help name-count">
-            <div class="form-meta"><span id="name-help">Original names work best.</span><span id="name-count">0 / 80</span></div>
+            <label for="brand-name">Brand or project name</label>
+            <input id="brand-name" name="brand_name" type="text" required maxlength="80" autocomplete="off" placeholder="Try Fieldwell" aria-describedby="name-help name-count">
+            <div class="form-meta"><span id="name-help">Use any serious, playful, or experimental direction.</span><span id="name-count">0 / 80</span></div>
             <button class="button generate-button" id="generate-button" type="submit"><span id="generate-label">Generate brand kit</span></button>
             <p class="generation-status" id="generation-status" role="status" aria-live="polite"></p>
           </form>
@@ -307,7 +307,7 @@ HOME_PAGE = """<!doctype html>
     <section class="results" id="brand-results" aria-labelledby="results-heading" tabindex="-1" hidden>
       <div class="shell">
         <header class="results-header">
-          <div><p class="result-kind success" id="result-kind">Brand kit ready</p><h2 id="results-heading">Your brand</h2><p class="result-target" id="result-target"></p></div>
+          <div><p class="result-kind success" id="result-kind">Brand starting point ready</p><h2 id="results-heading">Your brand</h2><p class="result-target" id="result-target"></p></div>
           <div class="result-actions"><a class="quiet-button" id="view-saved-brand" href="/brands" hidden>View full brand</a><button class="quiet-button" id="copy-result" type="button">Copy JSON</button><button class="quiet-button" id="reset-generator" type="button">Make another</button></div>
         </header>
         <div class="result-grid" id="result-content"></div>
@@ -318,9 +318,9 @@ HOME_PAGE = """<!doctype html>
       <div class="shell">
         <div class="section-heading"><p class="kicker">The whole idea</p><h2 id="how-heading">A small pipeline with a useful finish line.</h2></div>
         <div class="steps">
-          <article class="step"><h3>Name it</h3><p>Send one original parody brand name, between 1 and 80 characters.</p></article>
-          <article class="step"><h3>Make it</h3><p>The model develops the identity, positioning, personality, and palette.</p></article>
-          <article class="step"><h3>Check it</h3><p>The service validates every required field before returning the complete kit.</p></article>
+          <article class="step"><h3>Start anywhere</h3><p>Bring a raw idea, a name, or an existing project whose brand needs attention.</p></article>
+          <article class="step"><h3>Develop it</h3><p>The system helps research, position, express, test, and govern the brand.</p></article>
+          <article class="step"><h3>Earn readiness</h3><p>Concepts stay flexible; approved and production-ready labels require evidence and checks.</p></article>
         </div>
       </div>
     </section>
@@ -336,11 +336,11 @@ HOME_PAGE = """<!doctype html>
 OPENROUTER_API_KEY=your-key-here</code></pre><p class="note"><strong>Keep it private.</strong> Never paste your key into a browser page, screenshot it, or commit <code>.env</code> to Git.</p></article>
             <article id="run"><h3><span class="number" aria-hidden="true">2</span>Install and start</h3><p>From the project folder, install the dependencies and launch the local server.</p><pre tabindex="0"><code>uv sync --extra dev
 uv run brand-maker</code></pre><p>Leave that terminal open. The app is ready when it reports <code>Uvicorn running on http://127.0.0.1:8000</code>.</p></article>
-            <article id="create"><h3><span class="number" aria-hidden="true">3</span>Create your first brand</h3><p>Open the <a href="/docs">interactive API console</a>. Expand <strong>POST /brand</strong>, choose <strong>Try it out</strong>, replace the sample name, and press <strong>Execute</strong>.</p><pre tabindex="0"><code>{
-  "brand_name": "Floogle"
+            <article id="create"><h3><span class="number" aria-hidden="true">3</span>Create your first brand</h3><p>Use the quick-start form above or open <a href="/brand-systems">Living brands</a> for a durable workspace. The compatible <strong>POST /brand</strong> endpoint remains available for project automation.</p><pre tabindex="0"><code>{
+  "brand_name": "Fieldwell"
 }</code></pre><p>Prefer a terminal? This request does the same thing:</p><pre tabindex="0"><code>curl -X POST http://127.0.0.1:8000/brand \
   -H "Content-Type: application/json" \
-  -d '{"brand_name":"Floogle"}'</code></pre></article>
+  -d '{"brand_name":"Fieldwell"}'</code></pre></article>
           </div>
         </div>
       </div>
@@ -349,7 +349,7 @@ uv run brand-maker</code></pre><p>Leave that terminal open. The app is ready whe
     <section aria-labelledby="responses-heading">
       <div class="shell">
         <div class="section-heading"><p class="kicker">What comes back</p><h2 id="responses-heading">Readable outcomes, including when things go wrong.</h2></div>
-        <dl class="status-list"><div><dt>ok</dt><dd>A complete kit that passed every structural check.</dd></div><div><dt>refused</dt><dd>The name was not safe or suitable to develop.</dd></div><div><dt>error</dt><dd>The provider was unavailable or could not return a valid kit.</dd></div></dl>
+        <dl class="status-list"><div><dt>ok</dt><dd>A concept-stage starting point that passed every structural check.</dd></div><div><dt>refused</dt><dd>The name was not safe or suitable to develop.</dd></div><div><dt>error</dt><dd>The provider was unavailable or could not return a valid kit.</dd></div></dl>
       </div>
     </section>
   </main>

@@ -92,6 +92,7 @@ def test_library_assets_are_safe_and_dependency_free(tmp_path: Path) -> None:
     assert 'fetch("/api/brands' in script.text
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
+    assert "Parody of" not in script.text
     assert "eval(" not in script.text
     assert "Build complete brand bible" in script.text
     assert "/brand-systems?sourceBrandId=" in script.text

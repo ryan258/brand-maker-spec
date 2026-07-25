@@ -80,9 +80,9 @@ function renderSuccess(response) {
   currentResponse = response;
   resultContent.replaceChildren();
   resultKind.className = "result-kind success";
-  setText(resultKind, "Brand kit ready");
+  setText(resultKind, "Brand starting point ready");
   setText(resultTitle, kit.brand_name);
-  setText(resultTarget, `A parody of ${kit.parody_target}`);
+  setText(resultTarget, "Concept-stage living workspace created");
 
   const identity = makeElement("article", "result-card identity-card");
   identity.append(makeElement("p", "result-label", "Tagline"));
@@ -100,8 +100,11 @@ function renderSuccess(response) {
 
   resultContent.append(identity, voice, renderPalette(kit.color_palette));
   copyButton.hidden = false;
-  if (response.id) {
-    viewSavedBrand.href = `/brands/${encodeURIComponent(response.id)}`;
+  if (response.workspace_id || response.id) {
+    viewSavedBrand.href = response.workspace_id
+      ? `/brand-systems/${encodeURIComponent(response.workspace_id)}`
+      : `/brands/${encodeURIComponent(response.id)}`;
+    viewSavedBrand.textContent = response.workspace_id ? "Open living workspace" : "View saved kit";
     viewSavedBrand.hidden = false;
   }
   results.hidden = false;
