@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -6,6 +7,7 @@ import pytest
 
 from brand_maker.brand_system.models import LocalOwner, WorkingDraft
 from brand_maker.brand_system.repository import (
+    NothingToRedo,
     SQLiteBrandSystemRepository,
     StaleDraftRevision,
 )
@@ -55,6 +57,44 @@ def test_repository_creates_and_reads_a_validated_snapshot(tmp_path: Path) -> No
     assert SQLiteBrandSystemRepository(store.path).get(original.brand_id) == original
 
 
+def test_existing_workspace_receives_a_non_reversible_history_baseline(tmp_path: Path) -> None:
+    path = tmp_path / "brands.db"
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE brand_system_workspaces (
+                brand_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                schema_version TEXT NOT NULL, revision INTEGER NOT NULL, owner_id TEXT NOT NULL,
+                brand_name TEXT NOT NULL, status TEXT NOT NULL, draft_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO brand_system_workspaces VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(original.brand_id),
+                "2026-07-23T12:00:00+00:00",
+                "2026-07-23T12:00:00+00:00",
+                original.schema_version,
+                original.revision,
+                original.owner.id,
+                original.brand_name,
+                original.status,
+                original.model_dump_json(),
+            ),
+        )
+
+    store = SQLiteBrandSystemRepository(path)
+    history, total = store.list_audit(original.brand_id, page=1, page_size=10)
+
+    assert total == 1
+    assert history[0].action == "workspace.history_started"
+    assert history[0].to_revision == 1
+
+
 def test_expected_revision_update_is_atomic_and_rejects_stale_writes(
     tmp_path: Path,
 ) -> None:
@@ -68,6 +108,68 @@ def test_expected_revision_update_is_atomic_and_rejects_stale_writes(
     stale = original.model_copy(update={"brand_name": "Stale edit", "revision": 2})
     with pytest.raises(StaleDraftRevision):
         store.update(stale, expected_revision=1)
+
+    assert store.get(original.brand_id) == updated
+
+
+def test_audit_history_supports_revision_safe_undo_and_redo(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    store.create(original)
+    updated = original.model_copy(update={"brand_name": "Northstar Studio", "revision": 2})
+    store.update(
+        updated,
+        expected_revision=1,
+        action="workspace.renamed",
+        reason="Clarify the studio positioning.",
+    )
+
+    history, total = store.list_audit(original.brand_id, page=1, page_size=10)
+    assert total == 2
+    assert history[0].action == "workspace.renamed"
+    assert history[0].changed_fields == ["brand_name"]
+    assert history[0].reason == "Clarify the studio positioning."
+
+    undone = store.undo(original.brand_id, expected_revision=2)
+    assert undone.brand_name == "Northstar"
+    assert undone.revision == 3
+
+    redone = store.redo(original.brand_id, expected_revision=3)
+    assert redone.brand_name == "Northstar Studio"
+    assert redone.revision == 4
+
+    events = store.list_audit(original.brand_id, page=1, page_size=10)[0]
+    actions = [event.action for event in events]
+    assert actions[:2] == ["workspace.redone", "workspace.undone"]
+
+
+def test_new_edit_after_undo_discards_redo_branch(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    store.create(original)
+    store.update(
+        original.model_copy(update={"brand_name": "First edit", "revision": 2}),
+        expected_revision=1,
+    )
+    undone = store.undo(original.brand_id, expected_revision=2)
+    store.update(
+        undone.model_copy(update={"brand_name": "New direction", "revision": 4}),
+        expected_revision=3,
+    )
+
+    with pytest.raises(NothingToRedo):
+        store.redo(original.brand_id, expected_revision=4)
+
+
+def test_undo_rejects_a_stale_revision_without_changing_the_workspace(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    store.create(original)
+    updated = original.model_copy(update={"brand_name": "Current", "revision": 2})
+    store.update(updated, expected_revision=1)
+
+    with pytest.raises(StaleDraftRevision):
+        store.undo(original.brand_id, expected_revision=1)
 
     assert store.get(original.brand_id) == updated
 

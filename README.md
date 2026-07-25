@@ -51,8 +51,9 @@ The living-brand workflow is:
    assets; print it or save it as PDF directly from the browser. Patterns include
    say/never-say guidance, message systems, web-component specifications and states,
    type scales, layout templates, channel playbooks, and governance workflows.
-4. Review dependencies, lock settled sections, approve an exact draft revision,
-   and publish an immutable semantic version.
+4. Review dependencies and the local audit feed, undo or redo revision-safe edits,
+   lock settled sections, approve an exact draft revision, and publish an immutable
+   semantic version.
 5. Render creator, designer, business, or agency views; export Markdown, developer
    tokens/rules, canonical archives, or tagged PDF/UA.
 6. Register artifact revisions and run deterministic compliance checks. Unsupported
@@ -70,6 +71,11 @@ browser uses the persistent library API:
 - `POST /api/brands`: generate and save a successful kit.
 - `GET /api/brands?page=1&pageSize=12`: list saved brands newest first.
 - `GET /api/brands/{id}`: retrieve one complete saved brand.
+
+Living workspaces expose bounded audit history at
+`GET /api/brand-systems/{id}/audit`. Revision-safe `POST` requests to the sibling
+`/undo` and `/redo` endpoints require the current `expected_revision`; a new edit
+after undo deliberately closes the abandoned redo branch.
 
 ## API outcomes
 

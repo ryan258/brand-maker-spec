@@ -70,7 +70,6 @@ Completed ideas retain their original numbers in `changelog.md`.
 55. **Adapt** — Personal review notes replace multi-user threaded comments.
 56. **Defer** — Email/Slack workflow notifications are not required locally.
 57. **Adapt** — Exact-revision self-review and rationale gate approved status.
-58. **Adapt** — A durable local audit feed records what changed and why.
 59. **Defer** — Role-based permissions are unnecessary for one owner.
 60. **Defer** — Teammate mentions require collaboration accounts.
 
@@ -109,8 +108,6 @@ Completed ideas retain their original numbers in `changelog.md`.
 
 ## Platform, Trust & Growth
 
-91. **Build** — Revision-safe undo/redo for canonical edits.
-92. **Build** — Persist a full local audit log per brand.
 93. **Build** — Soft-delete and restore workspaces through a recoverable trash.
 94. **Build** — Hash-validated per-brand backups and restore.
 95. **Build** — Transparent, erasable local workflow analytics.

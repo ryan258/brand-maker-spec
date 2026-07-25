@@ -108,6 +108,47 @@ def test_create_list_and_get_local_workspace(tmp_path: Path) -> None:
     assert listing.json()["items"][0]["brand_id"] == brand_id
 
 
+def test_workspace_audit_undo_and_redo_api(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar Studio", "owner_name": "Ryan"},
+        ).json()
+        section = created["sections"][0]
+        section["status"] = "draft"
+        section["blocks"] = [
+            {"id": "block.strategy.promise", "type": "paragraph", "text": "Make ideas legible."}
+        ]
+        changed = api.patch(
+            f"/api/brand-systems/{created['brand_id']}/sections/{section['id']}",
+            json={
+                "expected_revision": 1,
+                "change_note": "Capture the core promise.",
+                "section": section,
+            },
+        )
+        history = api.get(f"/api/brand-systems/{created['brand_id']}/audit")
+        undone = api.post(
+            f"/api/brand-systems/{created['brand_id']}/undo",
+            json={"expected_revision": 2},
+        )
+        redone = api.post(
+            f"/api/brand-systems/{created['brand_id']}/redo",
+            json={"expected_revision": 3},
+        )
+
+    assert changed.status_code == 200
+    assert history.status_code == 200
+    assert history.json()["items"][0]["action"] == "section.replaced"
+    assert history.json()["items"][0]["reason"] == "Capture the core promise."
+    assert undone.status_code == 200
+    assert undone.json()["sections"][0]["status"] == "incomplete"
+    assert redone.status_code == 200
+    assert redone.json()["sections"][0]["blocks"][0]["text"] == "Make ideas legible."
+
+
 def test_workspace_readiness_reports_visible_blockers_and_checks_revision(
     tmp_path: Path,
 ) -> None:

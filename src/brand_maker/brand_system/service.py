@@ -176,6 +176,7 @@ class BrandSystemService:
         expected_revision: int,
         *,
         confirm_locked: bool = False,
+        change_note: str | None = None,
     ) -> WorkingDraft:
         current = self._workspaces.get(brand_id)
         if current is None:
@@ -195,7 +196,12 @@ class BrandSystemService:
         payload = candidate.model_dump(mode="json")
         payload.update({"revision": expected_revision + 1, "status": "draft"})
         updated = WorkingDraft.model_validate(payload)
-        return self._workspaces.update(updated, expected_revision=expected_revision)
+        return self._workspaces.update(
+            updated,
+            expected_revision=expected_revision,
+            action="section.replaced",
+            reason=change_note,
+        )
 
     def preview_section(
         self, brand_id: UUID, section_id: str, section: BrandSection, expected_revision: int

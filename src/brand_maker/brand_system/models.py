@@ -479,6 +479,7 @@ class UpdateSectionRequest(ContractModel):
     expected_revision: int = Field(..., ge=1)
     section: BrandSection
     confirm_locked: bool = False
+    change_note: ShortText | None = None
 
 
 class ValidationIssue(ContractModel):

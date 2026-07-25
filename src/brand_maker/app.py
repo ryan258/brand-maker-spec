@@ -35,6 +35,7 @@ from brand_maker.brand_system.amendments import (
     StaleAmendmentValue,
 )
 from brand_maker.brand_system.assets import AssetChanged, AssetMissing, AssetStore
+from brand_maker.brand_system.audit import AuditPage, RevisionCommand
 from brand_maker.brand_system.models import (
     AmendmentRequest,
     ApprovalRecord,
@@ -67,6 +68,8 @@ from brand_maker.brand_system.readiness import (
     assess_readiness,
 )
 from brand_maker.brand_system.repository import (
+    NothingToRedo,
+    NothingToUndo,
     SQLiteBrandSystemRepository,
     StaleDraftRevision,
 )
@@ -802,6 +805,71 @@ def create_app(
             raise HTTPException(status_code=404, detail="Brand system not found.")
         return draft
 
+    @app.get(
+        "/api/brand-systems/{brand_id}/audit",
+        response_model=AuditPage,
+        tags=["living brand systems"],
+    )
+    async def list_brand_system_audit(
+        brand_id: UUID,
+        request: Request,
+        page: int = Query(1, ge=1, le=1_000_000),
+        page_size: int = Query(25, alias="pageSize", ge=1, le=100),
+    ) -> AuditPage:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        if await run_in_threadpool(store.get, brand_id) is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        items, total = await run_in_threadpool(
+            partial(store.list_audit, brand_id, page=page, page_size=page_size)
+        )
+        return AuditPage(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total_items=total,
+            total_pages=(total + page_size - 1) // page_size,
+        )
+
+    async def move_brand_system_history(
+        brand_id: UUID,
+        payload: RevisionCommand,
+        request: Request,
+        *,
+        redo: bool,
+    ) -> WorkingDraft:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        operation = store.redo if redo else store.undo
+        try:
+            return await run_in_threadpool(
+                partial(operation, brand_id, expected_revision=payload.expected_revision)
+            )
+        except StaleDraftRevision:
+            if await run_in_threadpool(store.get, brand_id) is None:
+                raise HTTPException(status_code=404, detail="Brand system not found.") from None
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except (NothingToUndo, NothingToRedo) as exc:
+            raise HTTPException(status_code=409, detail=str(exc).capitalize() + ".") from None
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/undo",
+        response_model=WorkingDraft,
+        tags=["living brand systems"],
+    )
+    async def undo_brand_system(
+        brand_id: UUID, payload: RevisionCommand, request: Request
+    ) -> WorkingDraft:
+        return await move_brand_system_history(brand_id, payload, request, redo=False)
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/redo",
+        response_model=WorkingDraft,
+        tags=["living brand systems"],
+    )
+    async def redo_brand_system(
+        brand_id: UUID, payload: RevisionCommand, request: Request
+    ) -> WorkingDraft:
+        return await move_brand_system_history(brand_id, payload, request, redo=True)
+
     @app.post(
         "/api/brand-systems/{brand_id}/readiness",
         response_model=ReadinessReport,
@@ -839,6 +907,7 @@ def create_app(
                     payload.section,
                     payload.expected_revision,
                     confirm_locked=payload.confirm_locked,
+                    change_note=payload.change_note,
                 )
             )
         except StaleDraftRevision:

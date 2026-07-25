@@ -27,6 +27,8 @@
 - **Idea 22:** Added AI-generated monochrome, inverted, horizontal-lockup, and
   icon-only logo variants.
 - **Idea 23:** Added local raster-to-SVG logo vectorization.
+- **Idea 58:** Added a durable local audit feed with changed fields and optional
+  owner rationale for canonical edits.
 - **Idea 68:** Added canonical validation for broken cross-section references.
 - **Idea 69:** Added a browser workflow for visible, expiring compliance exceptions
   and supporting evidence.
@@ -35,6 +37,10 @@
 - **Idea 76:** Added immutable, semantically versioned brand releases.
 - **Idea 77:** Added downloadable brand-kit bundles with the bible, tokens, and
   registered production assets.
+- **Idea 91:** Added optimistic-lock-safe undo and redo without rewriting immutable
+  published versions.
+- **Idea 92:** Persisted reversible before/after history for each canonical workspace
+  mutation, including explicit undo and redo events.
 - **Idea 99:** Added responsive single-column workshop layouts and wrapping controls.
 
 ### Changed
