@@ -174,6 +174,45 @@ def test_undo_rejects_a_stale_revision_without_changing_the_workspace(tmp_path: 
     assert store.get(original.brand_id) == updated
 
 
+def test_soft_delete_hides_workspace_and_restore_recovers_it(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    store.create(original)
+
+    trashed = store.soft_delete(
+        original.brand_id,
+        expected_revision=1,
+        reason="Pause this direction without losing the work.",
+    )
+
+    assert trashed.brand_id == original.brand_id
+    assert trashed.reason == "Pause this direction without losing the work."
+    assert store.get(original.brand_id) is None
+    assert store.list(page=1, page_size=10)[1] == 0
+    assert store.list_trash(page=1, page_size=10)[1] == 1
+
+    restored = store.restore_from_trash(original.brand_id, expected_revision=1)
+    assert restored == original
+    assert store.get(original.brand_id) == original
+    assert store.list_trash(page=1, page_size=10)[1] == 0
+    events = store.list_audit(original.brand_id, page=1, page_size=10)[0]
+    actions = [event.action for event in events]
+    assert actions[:2] == ["workspace.restored", "workspace.trashed"]
+
+
+def test_soft_delete_and_restore_reject_stale_revisions(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")
+    store.create(original)
+
+    with pytest.raises(StaleDraftRevision):
+        store.soft_delete(original.brand_id, expected_revision=2, reason=None)
+
+    store.soft_delete(original.brand_id, expected_revision=1, reason=None)
+    with pytest.raises(StaleDraftRevision):
+        store.restore_from_trash(original.brand_id, expected_revision=2)
+
+
 def test_repository_lists_recently_updated_workspaces_with_bounded_pages(
     tmp_path: Path,
 ) -> None:

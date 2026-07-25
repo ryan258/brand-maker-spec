@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -147,6 +148,96 @@ def test_workspace_audit_undo_and_redo_api(tmp_path: Path) -> None:
     assert undone.json()["sections"][0]["status"] == "incomplete"
     assert redone.status_code == 200
     assert redone.json()["sections"][0]["blocks"][0]["text"] == "Make ideas legible."
+
+
+def test_workspace_trash_and_restore_api(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar Studio", "owner_name": "Ryan"},
+        ).json()
+        brand_id = created["brand_id"]
+        deleted = api.request(
+            "DELETE",
+            f"/api/brand-systems/{brand_id}",
+            json={"expected_revision": 1, "reason": "Archive this direction for now."},
+        )
+        missing = api.get(f"/api/brand-systems/{brand_id}")
+        trash = api.get("/api/brand-system-trash?page=1&pageSize=10")
+        restored = api.post(
+            f"/api/brand-system-trash/{brand_id}/restore",
+            json={"expected_revision": 1},
+        )
+
+    assert deleted.status_code == 200
+    assert deleted.json()["reason"] == "Archive this direction for now."
+    assert missing.status_code == 404
+    assert trash.json()["items"][0]["brand_id"] == brand_id
+    assert restored.status_code == 200
+    assert restored.json()["brand_name"] == "Northstar Studio"
+
+
+def test_workspace_backup_restores_exact_content_as_a_new_revision(tmp_path: Path) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar Studio", "owner_name": "Ryan"},
+        ).json()
+        brand_id = created["brand_id"]
+        backup = api.get(f"/api/brand-systems/{brand_id}/backup")
+        section = created["sections"][0]
+        section["status"] = "draft"
+        section["blocks"] = [
+            {"id": "block.strategy.temporary", "type": "paragraph", "text": "Temporary."}
+        ]
+        api.patch(
+            f"/api/brand-systems/{brand_id}/sections/{section['id']}",
+            json={"expected_revision": 1, "section": section},
+        )
+        restored = api.post(
+            "/api/brand-system-backups?expectedRevision=2",
+            content=backup.content,
+            headers={"Content-Type": "application/zip"},
+        )
+
+        source = ZipFile(BytesIO(backup.content))
+        tampered_buffer = BytesIO()
+        with source, ZipFile(tampered_buffer, "w", ZIP_DEFLATED) as tampered_zip:
+            for info in source.infolist():
+                payload = source.read(info.filename)
+                if info.filename == "workspace.json":
+                    payload += b" "
+                tampered_zip.writestr(info.filename, payload)
+        tampered = api.post(
+            "/api/brand-system-backups?expectedRevision=3",
+            content=tampered_buffer.getvalue(),
+            headers={"Content-Type": "application/zip"},
+        )
+        unchanged = api.get(f"/api/brand-systems/{brand_id}")
+        api.request(
+            "DELETE",
+            f"/api/brand-systems/{brand_id}",
+            json={"expected_revision": 3, "reason": "Exercise disaster recovery."},
+        )
+        restored_from_trash = api.post(
+            "/api/brand-system-backups?expectedRevision=3",
+            content=backup.content,
+            headers={"Content-Type": "application/zip"},
+        )
+
+    assert backup.status_code == 200
+    assert backup.headers["content-type"] == "application/zip"
+    assert restored.status_code == 200
+    assert restored.json()["revision"] == 3
+    assert restored.json()["sections"][0]["status"] == "incomplete"
+    assert tampered.status_code == 422
+    assert unchanged.json() == restored.json()
+    assert restored_from_trash.status_code == 200
+    assert restored_from_trash.json()["revision"] == 4
 
 
 def test_workspace_readiness_reports_visible_blockers_and_checks_revision(

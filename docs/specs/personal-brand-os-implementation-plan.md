@@ -13,8 +13,9 @@ changes remain untouched until they can be reconciled deliberately.
 - Complete: Tasks 1.1–1.3 (lifecycle/brief, evidence/decisions, generated provenance).
 - Complete: Tasks 2.1–2.2 (readiness reports and approval/publication enforcement).
 - Complete: Task 2.3 (durable audit history and revision-safe undo/redo APIs).
+- Complete: Task 2.4 (recoverable trash and checksum-bound workspace backups).
 - Complete: Task 3.1 (unified non-parody quick start with compatibility preservation).
-- Next: Task 2.4, soft delete plus hash-validated backup and restore.
+- Next: Tasks 3.2–3.3, structured entry paths and an incremental brand brief.
 
 ## Architecture Decisions
 

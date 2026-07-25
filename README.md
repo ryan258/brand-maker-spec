@@ -77,6 +77,14 @@ Living workspaces expose bounded audit history at
 `/undo` and `/redo` endpoints require the current `expected_revision`; a new edit
 after undo deliberately closes the abandoned redo branch.
 
+`DELETE /api/brand-systems/{id}` moves a workspace into recoverable trash; list it at
+`GET /api/brand-system-trash` and restore it through the item-level `/restore` route.
+Download a checksum-bound portable backup from
+`GET /api/brand-systems/{id}/backup`. Restore a new workspace through
+`POST /api/brand-system-backups`, or pass the current `expectedRevision` to replace an
+existing or trashed workspace as a new revision. Restore validates the complete
+manifest and every managed asset before changing workspace state.
+
 ## API outcomes
 
 - `ok`: a complete, contract-valid kit is present.

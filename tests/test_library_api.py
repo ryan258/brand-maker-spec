@@ -77,6 +77,27 @@ def test_create_brand_saves_success_and_exposes_full_detail(tmp_path: Path) -> N
     assert pipeline.calls == ["Floogle"]
 
 
+def test_trashed_quick_start_cannot_be_duplicated_from_its_saved_kit(tmp_path: Path) -> None:
+    pipeline = FakePipeline(BrandResponse(status="ok", kit=brand_kit()))
+    path = tmp_path / "brands.db"
+    settings = Settings(_env_file=None, openrouter_api_key="test-key", database_path=path)
+
+    with TestClient(create_app(settings=settings, pipeline=pipeline)) as client:
+        created = client.post("/api/brands", json={"brand_name": "Floogle"}).json()
+        client.request(
+            "DELETE",
+            f"/api/brand-systems/{created['workspace_id']}",
+            json={"expected_revision": 1, "reason": "Try a different direction."},
+        )
+        duplicate = client.post(
+            "/api/brand-systems",
+            json={"owner_name": "Ryan", "source_brand_id": created["id"]},
+        )
+
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "The source workspace is in recoverable trash."
+
+
 def test_create_brand_does_not_save_terminal_failure(tmp_path: Path) -> None:
     pipeline = FakePipeline(
         BrandResponse(status="error", message="Model provider unavailable.")

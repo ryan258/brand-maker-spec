@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from brand_maker.brand_system.audit import AuditEvent
 from brand_maker.brand_system.models import WorkingDraft, WorkspaceSummary
+from brand_maker.brand_system.recovery import TrashRecord
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS brand_system_workspaces (
@@ -45,6 +46,14 @@ CREATE TABLE IF NOT EXISTS brand_system_audit_events (
     undone_by_event_id TEXT,
     redo_discarded INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS brand_system_trash (
+    brand_id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    reason TEXT
+);
+CREATE INDEX IF NOT EXISTS brand_system_trash_deleted
+ON brand_system_trash (deleted_at DESC, brand_id DESC);
 CREATE INDEX IF NOT EXISTS brand_system_audit_brand_order
 ON brand_system_audit_events (brand_id, created_at DESC, event_id DESC);
 INSERT INTO brand_system_audit_events (
@@ -82,6 +91,14 @@ class NothingToUndo(BrandSystemRepositoryError):
 
 class NothingToRedo(BrandSystemRepositoryError):
     """No undid mutation remains on the current history branch."""
+
+
+class WorkspaceAlreadyTrashed(BrandSystemRepositoryError):
+    """The workspace is already recoverably deleted."""
+
+
+class WorkspaceNotTrashed(BrandSystemRepositoryError):
+    """The workspace is not present in recoverable trash."""
 
 
 def _changed_fields(before: WorkingDraft, after: WorkingDraft) -> list[str]:
@@ -178,24 +195,45 @@ class SQLiteBrandSystemRepository:
     def get(self, brand_id: UUID) -> WorkingDraft | None:
         with self._connect() as connection:
             row = connection.execute(
+                """
+                SELECT workspace.draft_json
+                FROM brand_system_workspaces AS workspace
+                WHERE workspace.brand_id = ? AND NOT EXISTS (
+                    SELECT 1 FROM brand_system_trash AS trash
+                    WHERE trash.brand_id = workspace.brand_id
+                )
+                """,
+                (str(brand_id),),
+            ).fetchone()
+        return WorkingDraft.model_validate_json(row[0]) if row is not None else None
+
+    def get_including_trash(self, brand_id: UUID) -> WorkingDraft | None:
+        with self._connect() as connection:
+            row = connection.execute(
                 "SELECT draft_json FROM brand_system_workspaces WHERE brand_id = ?",
                 (str(brand_id),),
             ).fetchone()
         return WorkingDraft.model_validate_json(row[0]) if row is not None else None
 
-    def get_by_source_brand_id(self, source_brand_id: UUID) -> WorkingDraft | None:
+    def get_by_source_brand_id(
+        self, source_brand_id: UUID, *, include_trashed: bool = False
+    ) -> WorkingDraft | None:
         """Return the canonical workspace previously created from a saved kit."""
 
         with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT draft_json
-                FROM brand_system_workspaces
+                FROM brand_system_workspaces AS workspace
                 WHERE json_extract(draft_json, '$.source_brand_id') = ?
+                  AND (? OR NOT EXISTS (
+                    SELECT 1 FROM brand_system_trash AS trash
+                    WHERE trash.brand_id = workspace.brand_id
+                  ))
                 ORDER BY created_at ASC, brand_id ASC
                 LIMIT 1
                 """,
-                (str(source_brand_id),),
+                (str(source_brand_id), include_trashed),
             ).fetchone()
         return WorkingDraft.model_validate_json(row[0]) if row is not None else None
 
@@ -451,18 +489,247 @@ class SQLiteBrandSystemRepository:
                 )
         return restored
 
+    def soft_delete(
+        self, brand_id: UUID, *, expected_revision: int, reason: str | None
+    ) -> TrashRecord:
+        """Move an active workspace into recoverable trash without erasing its graph."""
+
+        deleted_at = self._clock()
+        now = deleted_at.isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT workspace.draft_json, trash.brand_id
+                FROM brand_system_workspaces AS workspace
+                LEFT JOIN brand_system_trash AS trash ON trash.brand_id = workspace.brand_id
+                WHERE workspace.brand_id = ?
+                """,
+                (str(brand_id),),
+            ).fetchone()
+            if row is None:
+                raise StaleDraftRevision("draft revision conflict")
+            if row[1] is not None:
+                raise WorkspaceAlreadyTrashed("workspace is already in trash")
+            draft = WorkingDraft.model_validate_json(row[0])
+            if draft.revision != expected_revision:
+                raise StaleDraftRevision("draft revision conflict")
+            connection.execute(
+                "INSERT INTO brand_system_trash VALUES (?, ?, ?, ?)",
+                (str(brand_id), now, draft.revision, reason),
+            )
+            self._record_lifecycle_event(
+                connection,
+                draft=draft,
+                action="workspace.trashed",
+                reason=reason,
+                created_at=now,
+            )
+        return TrashRecord(
+            brand_id=brand_id,
+            brand_name=draft.brand_name,
+            revision=draft.revision,
+            deleted_at=deleted_at,
+            reason=reason,
+        )
+
+    def restore_from_trash(
+        self, brand_id: UUID, *, expected_revision: int
+    ) -> WorkingDraft:
+        """Restore one trashed workspace after an optimistic revision check."""
+
+        now = self._clock().isoformat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT workspace.draft_json
+                FROM brand_system_workspaces AS workspace
+                JOIN brand_system_trash AS trash ON trash.brand_id = workspace.brand_id
+                WHERE workspace.brand_id = ?
+                """,
+                (str(brand_id),),
+            ).fetchone()
+            if row is None:
+                raise WorkspaceNotTrashed("workspace is not in trash")
+            draft = WorkingDraft.model_validate_json(row[0])
+            if draft.revision != expected_revision:
+                raise StaleDraftRevision("draft revision conflict")
+            connection.execute(
+                "DELETE FROM brand_system_trash WHERE brand_id = ?",
+                (str(brand_id),),
+            )
+            self._record_lifecycle_event(
+                connection,
+                draft=draft,
+                action="workspace.restored",
+                reason=None,
+                created_at=now,
+            )
+        return draft
+
+    def restore_backup(
+        self, snapshot: WorkingDraft, *, expected_revision: int | None
+    ) -> WorkingDraft:
+        """Install a validated backup as a new optimistic revision or new workspace."""
+
+        current = self.get_including_trash(snapshot.brand_id)
+        if current is None:
+            if expected_revision is not None:
+                raise StaleDraftRevision("draft revision conflict")
+            return self.create(snapshot)
+        if expected_revision is None or current.revision != expected_revision:
+            raise StaleDraftRevision("draft revision conflict")
+
+        payload = snapshot.model_dump(mode="json")
+        payload["revision"] = current.revision + 1
+        restored = WorkingDraft.model_validate(payload)
+        now = self._clock().isoformat()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE brand_system_workspaces
+                SET updated_at = ?, schema_version = ?, revision = ?, owner_id = ?,
+                    brand_name = ?, status = ?, draft_json = ?
+                WHERE brand_id = ? AND revision = ?
+                """,
+                (
+                    now,
+                    restored.schema_version,
+                    restored.revision,
+                    restored.owner.id,
+                    restored.brand_name,
+                    restored.status,
+                    restored.model_dump_json(),
+                    str(restored.brand_id),
+                    expected_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StaleDraftRevision("draft revision conflict")
+            connection.execute(
+                "DELETE FROM brand_system_trash WHERE brand_id = ?",
+                (str(restored.brand_id),),
+            )
+            connection.execute(
+                """
+                UPDATE brand_system_audit_events
+                SET redo_discarded = 1
+                WHERE brand_id = ? AND undone_at IS NOT NULL
+                """,
+                (str(restored.brand_id),),
+            )
+            connection.execute(
+                """
+                INSERT INTO brand_system_audit_events (
+                    event_id, brand_id, action, from_revision, to_revision,
+                    changed_fields_json, reason, before_json, after_json,
+                    target_event_id, created_at, reversible
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    str(restored.brand_id),
+                    "workspace.backup_restored",
+                    current.revision,
+                    restored.revision,
+                    json.dumps(_changed_fields(current, restored)),
+                    "Restore a validated local workspace backup.",
+                    current.model_dump_json(),
+                    restored.model_dump_json(),
+                    None,
+                    now,
+                    1,
+                ),
+            )
+        return restored
+
+    def list_trash(
+        self, *, page: int, page_size: int
+    ) -> tuple[list[TrashRecord], int]:
+        if page < 1 or not 1 <= page_size <= 100:
+            raise ValueError("page must be positive and page_size must be between 1 and 100")
+        offset = (page - 1) * page_size
+        with self._connect() as connection:
+            total = int(connection.execute("SELECT COUNT(*) FROM brand_system_trash").fetchone()[0])
+            rows = connection.execute(
+                """
+                SELECT trash.brand_id, workspace.brand_name, trash.revision,
+                       trash.deleted_at, trash.reason
+                FROM brand_system_trash AS trash
+                JOIN brand_system_workspaces AS workspace
+                  ON workspace.brand_id = trash.brand_id
+                ORDER BY trash.deleted_at DESC, trash.brand_id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (page_size, offset),
+            ).fetchall()
+        return [
+            TrashRecord(
+                brand_id=UUID(row[0]),
+                brand_name=row[1],
+                revision=row[2],
+                deleted_at=row[3],
+                reason=row[4],
+            )
+            for row in rows
+        ], total
+
+    @staticmethod
+    def _record_lifecycle_event(
+        connection: sqlite3.Connection,
+        *,
+        draft: WorkingDraft,
+        action: str,
+        reason: str | None,
+        created_at: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO brand_system_audit_events (
+                event_id, brand_id, action, from_revision, to_revision,
+                changed_fields_json, reason, before_json, after_json,
+                target_event_id, created_at, reversible
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                str(draft.brand_id),
+                action,
+                draft.revision,
+                draft.revision,
+                '["trash"]',
+                reason,
+                draft.model_dump_json(),
+                draft.model_dump_json(),
+                None,
+                created_at,
+                0,
+            ),
+        )
+
     def list(self, *, page: int, page_size: int) -> tuple[list[WorkspaceSummary], int]:
         if page < 1 or not 1 <= page_size <= 100:
             raise ValueError("page must be positive and page_size must be between 1 and 100")
         offset = (page - 1) * page_size
         with self._connect() as connection:
             total = int(
-                connection.execute("SELECT COUNT(*) FROM brand_system_workspaces").fetchone()[0]
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM brand_system_workspaces AS workspace
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM brand_system_trash AS trash
+                        WHERE trash.brand_id = workspace.brand_id
+                    )
+                    """
+                ).fetchone()[0]
             )
             rows = connection.execute(
                 """
-                SELECT draft_json
-                FROM brand_system_workspaces
+                SELECT workspace.draft_json
+                FROM brand_system_workspaces AS workspace
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM brand_system_trash AS trash
+                    WHERE trash.brand_id = workspace.brand_id
+                )
                 ORDER BY updated_at DESC, brand_id DESC
                 LIMIT ? OFFSET ?
                 """,

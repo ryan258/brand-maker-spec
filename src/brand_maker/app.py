@@ -36,6 +36,13 @@ from brand_maker.brand_system.amendments import (
 )
 from brand_maker.brand_system.assets import AssetChanged, AssetMissing, AssetStore
 from brand_maker.brand_system.audit import AuditPage, RevisionCommand
+from brand_maker.brand_system.backup import (
+    MAX_BACKUP_BYTES,
+    InvalidWorkspaceBackup,
+    create_workspace_backup,
+    install_backup_assets,
+    read_workspace_backup,
+)
 from brand_maker.brand_system.models import (
     AmendmentRequest,
     ApprovalRecord,
@@ -67,11 +74,19 @@ from brand_maker.brand_system.readiness import (
     ReadinessRequest,
     assess_readiness,
 )
+from brand_maker.brand_system.recovery import (
+    DeleteWorkspaceRequest,
+    RestoreWorkspaceRequest,
+    TrashPage,
+    TrashRecord,
+)
 from brand_maker.brand_system.repository import (
     NothingToRedo,
     NothingToUndo,
     SQLiteBrandSystemRepository,
     StaleDraftRevision,
+    WorkspaceAlreadyTrashed,
+    WorkspaceNotTrashed,
 )
 from brand_maker.brand_system.service import (
     BrandSystemService,
@@ -772,6 +787,10 @@ def create_app(
             return await run_in_threadpool(service.create, payload)
         except SourceBrandNotFound:
             raise HTTPException(status_code=404, detail="Source brand not found.") from None
+        except WorkspaceAlreadyTrashed:
+            raise HTTPException(
+                status_code=409, detail="The source workspace is in recoverable trash."
+            ) from None
 
     @app.get(
         "/api/brand-systems",
@@ -794,6 +813,50 @@ def create_app(
         )
 
     @app.get(
+        "/api/brand-system-trash",
+        response_model=TrashPage,
+        tags=["living brand systems"],
+    )
+    async def list_brand_system_trash(
+        request: Request,
+        page: int = Query(1, ge=1, le=1_000_000),
+        page_size: int = Query(12, alias="pageSize", ge=1, le=100),
+    ) -> TrashPage:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        items, total = await run_in_threadpool(
+            partial(store.list_trash, page=page, page_size=page_size)
+        )
+        return TrashPage(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total_items=total,
+            total_pages=(total + page_size - 1) // page_size,
+        )
+
+    @app.post(
+        "/api/brand-system-trash/{brand_id}/restore",
+        response_model=WorkingDraft,
+        tags=["living brand systems"],
+    )
+    async def restore_trashed_brand_system(
+        brand_id: UUID, payload: RestoreWorkspaceRequest, request: Request
+    ) -> WorkingDraft:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        try:
+            return await run_in_threadpool(
+                partial(
+                    store.restore_from_trash,
+                    brand_id,
+                    expected_revision=payload.expected_revision,
+                )
+            )
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except WorkspaceNotTrashed:
+            raise HTTPException(status_code=404, detail="Workspace is not in trash.") from None
+
+    @app.get(
         "/api/brand-systems/{brand_id}",
         response_model=WorkingDraft,
         tags=["living brand systems"],
@@ -804,6 +867,115 @@ def create_app(
         if draft is None:
             raise HTTPException(status_code=404, detail="Brand system not found.")
         return draft
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/backup",
+        tags=["living brand exports"],
+    )
+    async def backup_brand_system(brand_id: UUID, request: Request) -> Response:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        assets = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(store.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".zip") as temporary:
+                await run_in_threadpool(
+                    create_workspace_backup, draft, assets, Path(temporary.name)
+                )
+                body = Path(temporary.name).read_bytes()
+        except InvalidWorkspaceBackup:
+            raise HTTPException(
+                status_code=409, detail="Workspace assets failed backup validation."
+            ) from None
+        filename = quote(f"{draft.brand_name}-workspace-backup.zip")
+        return Response(
+            body,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        )
+
+    @app.post(
+        "/api/brand-system-backups",
+        response_model=WorkingDraft,
+        tags=["living brand exports"],
+    )
+    async def restore_brand_system_backup(
+        request: Request,
+        expected_revision: int | None = Query(None, alias="expectedRevision", ge=1),
+    ) -> WorkingDraft:
+        declared = request.headers.get("content-length")
+        if declared is not None:
+            try:
+                declared_size = int(declared)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid Content-Length.") from None
+            if declared_size > MAX_BACKUP_BYTES:
+                raise HTTPException(status_code=413, detail="Backup exceeds the safety limit.")
+        observed = 0
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temporary:
+            async for chunk in request.stream():
+                observed += len(chunk)
+                if observed > MAX_BACKUP_BYTES:
+                    raise HTTPException(status_code=413, detail="Backup exceeds the safety limit.")
+                temporary.write(chunk)
+            temporary.flush()
+            try:
+                snapshot, asset_payloads = await run_in_threadpool(
+                    read_workspace_backup, Path(temporary.name)
+                )
+            except InvalidWorkspaceBackup:
+                raise HTTPException(
+                    status_code=422, detail="Workspace backup is invalid."
+                ) from None
+
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        current = await run_in_threadpool(store.get_including_trash, snapshot.brand_id)
+        if (current is None and expected_revision is not None) or (
+            current is not None and current.revision != expected_revision
+        ):
+            raise HTTPException(status_code=409, detail="Draft revision conflict.")
+        settings_for_restore = cast(Settings, request.app.state.settings)
+        await run_in_threadpool(
+            install_backup_assets,
+            settings_for_restore.database_path.parent / "assets",
+            asset_payloads,
+        )
+        try:
+            return await run_in_threadpool(
+                partial(
+                    store.restore_backup,
+                    snapshot,
+                    expected_revision=expected_revision,
+                )
+            )
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+
+    @app.delete(
+        "/api/brand-systems/{brand_id}",
+        response_model=TrashRecord,
+        tags=["living brand systems"],
+    )
+    async def trash_brand_system(
+        brand_id: UUID, payload: DeleteWorkspaceRequest, request: Request
+    ) -> TrashRecord:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        if await run_in_threadpool(store.get_including_trash, brand_id) is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        try:
+            return await run_in_threadpool(
+                partial(
+                    store.soft_delete,
+                    brand_id,
+                    expected_revision=payload.expected_revision,
+                    reason=payload.reason,
+                )
+            )
+        except StaleDraftRevision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except WorkspaceAlreadyTrashed:
+            raise HTTPException(status_code=409, detail="Workspace is already in trash.") from None
 
     @app.get(
         "/api/brand-systems/{brand_id}/audit",

@@ -108,8 +108,6 @@ Completed ideas retain their original numbers in `changelog.md`.
 
 ## Platform, Trust & Growth
 
-93. **Build** — Soft-delete and restore workspaces through a recoverable trash.
-94. **Build** — Hash-validated per-brand backups and restore.
 95. **Build** — Transparent, erasable local workflow analytics.
 96. **Build** — Multi-language bible projections with shared canonical tokens.
 97. **Defer** — A template marketplace is outside the personal product.

@@ -41,6 +41,10 @@
   published versions.
 - **Idea 92:** Persisted reversible before/after history for each canonical workspace
   mutation, including explicit undo and redo events.
+- **Idea 93:** Added revision-checked soft deletion, a bounded recoverable trash, and
+  explicit restore without silently duplicating saved-kit workspaces.
+- **Idea 94:** Added portable per-brand workspace backups with bounded ZIP parsing,
+  manifest checksums, asset-integrity validation, and conflict-safe restore.
 - **Idea 99:** Added responsive single-column workshop layouts and wrapping controls.
 
 ### Changed

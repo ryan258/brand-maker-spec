@@ -14,7 +14,11 @@ from brand_maker.brand_system.models import (
     WorkingDraft,
     WorkspaceBrief,
 )
-from brand_maker.brand_system.repository import SQLiteBrandSystemRepository, StaleDraftRevision
+from brand_maker.brand_system.repository import (
+    SQLiteBrandSystemRepository,
+    StaleDraftRevision,
+    WorkspaceAlreadyTrashed,
+)
 from brand_maker.models import BrandKit
 from brand_maker.storage import SQLiteBrandRepository
 
@@ -135,8 +139,12 @@ class BrandSystemService:
             saved = self._legacy.get(request.source_brand_id)
             if saved is None:
                 raise SourceBrandNotFound
-            existing = self._workspaces.get_by_source_brand_id(request.source_brand_id)
+            existing = self._workspaces.get_by_source_brand_id(
+                request.source_brand_id, include_trashed=True
+            )
             if existing is not None:
+                if self._workspaces.get(existing.brand_id) is None:
+                    raise WorkspaceAlreadyTrashed("source workspace is in trash")
                 return existing
             source = saved.kit
         if source is not None:
