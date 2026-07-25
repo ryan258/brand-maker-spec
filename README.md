@@ -1,10 +1,14 @@
 # Brand System Maker
 
-A local-first FastAPI workshop for building comprehensive, versioned living brand
-systems. It supports structured editing, resumable section generation, approval and
-immutable publication, audience guides, portable exports, and evidence-rich brand
-compliance. The original parody-kit generator remains available as a compatible
-starting point and can be migrated into a living workspace.
+A local-first personal brand operating system for turning raw ideas, named concepts,
+and existing projects into researched, versioned living brands. It supports structured
+editing, resumable generation, approval and immutable publication, audience guides,
+portable exports, and evidence-rich brand compliance. The fast one-name generator is
+being unified as a quick entry path into the same durable workspace.
+
+The approved product direction and implementation sequence live in
+[`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md) and
+[`docs/specs/personal-brand-os-implementation-plan.md`](docs/specs/personal-brand-os-implementation-plan.md).
 
 ## Quick start
 
@@ -29,7 +33,7 @@ curl http://127.0.0.1:8000/health
 
 curl -X POST http://127.0.0.1:8000/brand \
   -H 'Content-Type: application/json' \
-  -d '{"brand_name":"Floogle"}'
+  -d '{"brand_name":"Fieldwell"}'
 ```
 
 Open `http://127.0.0.1:8000/brand-systems` to create and edit a living brand, or
@@ -39,8 +43,8 @@ available at `/docs`.
 
 The living-brand workflow is:
 
-1. Create a blank workspace, optionally pasting background context for the brand, or
-   migrate a saved parody kit.
+1. Create a workspace from a raw idea, named concept, existing project, or saved quick
+   kit, then add whatever founding context is already known.
 2. Edit sections manually or generate a complete/selected starting point.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
@@ -56,6 +60,8 @@ The living-brand workflow is:
 
 Saved quick kits remain available in the kit library. Use **Build complete brand
 bible** on a saved kit to preserve it as the exact source of a new living workspace.
+The older quick-kit schema retains a `parody_target` field for stored-data and API
+compatibility, but parody is no longer the product's positioning or creative limit.
 
 The original `POST /brand` endpoint remains stateless and backward-compatible. The
 browser uses the persistent library API:
@@ -130,7 +136,7 @@ and `2` for invalid input or evaluation failure.
 - `generation/`: versioned section prompts and resumable generation runs.
 - `publishing/`: audience projections, Markdown/developer/archive/PDF exports.
 - `compliance/`: artifact revisions, deterministic checks, campaigns, evidence, and exceptions.
-- `models.py`: retained parody-kit public contracts.
+- `models.py`: retained quick-kit compatibility contracts.
 - `openrouter.py`: bounded HTTP adapter and provider-envelope validation.
 - `json_extract.py`: defensive extraction of object-shaped model output.
 - `pipeline.py`: retry, refusal, failover, and terminal-outcome state machine.

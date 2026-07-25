@@ -1,4 +1,9 @@
-# Legacy Parody Brand Kit Pipeline - Compatibility Specification
+# Legacy Quick Brand Kit Pipeline - Compatibility Specification
+
+> Historical compatibility contract: the `parody_target` field and parody-oriented
+> evaluator remain observable legacy API behavior during migration. They do not define
+> the current product direction. New work follows `docs/specs/personal-brand-os.md`,
+> and browser quick starts become concept-stage living workspaces.
 
 > **Status:** Shipped compatibility contract
 > **Build target:** Legacy single-brand endpoint within the local Brand System Maker

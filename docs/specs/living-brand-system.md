@@ -55,10 +55,10 @@ may change them before implementation planning.
 6. Strategy is document-first; execution rules are structure-first.
 7. Every important recommendation records rationale, provenance, confidence, and
    any professional-verification requirement.
-8. The product registers and governs production assets but does not create logos,
-   illustrations, templates, or other production artwork. Drafts may reference
-   files in place, but publication snapshots every required asset into managed,
-   content-addressed local storage.
+8. The product may generate concept artwork and governed derivatives. Generated work
+   remains a concept until the production-readiness checks defined by
+   `personal-brand-os.md` are recorded. Publication snapshots every required asset into
+   managed, content-addressed local storage.
 9. Deterministic and judgment-based compliance results remain visibly distinct.
 10. Multi-brand inheritance and sub-brand overrides are deferred until the
     single-brand system is proven.
