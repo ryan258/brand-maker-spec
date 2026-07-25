@@ -8,7 +8,12 @@ from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
-from brand_maker.brand_system.models import WorkingDraft
+from brand_maker.brand_system.models import (
+    BrandSection,
+    DecisionRecord,
+    EvidenceSource,
+    WorkingDraft,
+)
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
 from brand_maker.generation.prompts import PROMPT_VERSION, section_messages
 from brand_maker.generation.repository import (
@@ -29,6 +34,70 @@ class Completer(Protocol):
 
 class GenerationRunNotFound(LookupError):
     pass
+
+
+def _record_generated_decision(
+    envelope: GeneratedSectionEnvelope,
+    *,
+    run: GenerationRun,
+    model: str,
+    recorded_at: datetime,
+) -> tuple[BrandSection, EvidenceSource, DecisionRecord]:
+    """Bind validated model output to durable rationale and provenance records."""
+
+    slug = envelope.section_id.removeprefix("section.")
+    evidence_id = f"evidence.generation.{run.id.hex}.{slug}"
+    decision_id = f"decision.generation.{run.id.hex}.{slug}"
+    evidence = EvidenceSource(
+        id=evidence_id,
+        kind="model-inference",
+        title=f"Generated {envelope.section.title} rationale",
+        summary=envelope.rationale,
+        locator=f"generation-run:{run.id}",
+        retrieved_at=recorded_at,
+    )
+    decision = DecisionRecord(
+        id=decision_id,
+        decision_type=f"generated.{slug}",
+        rationale=envelope.rationale,
+        provenance="model-inference",
+        source_ids=[evidence_id],
+        confidence="medium",
+        confidence_explanation=(
+            "This is a validated generated starting point that still requires owner review."
+        ),
+        verification_requirement="owner-review",
+        verification_status="unverified",
+        generation_run_id=f"run.{run.id.hex}",
+        prompt_version=envelope.prompt_version,
+        model=model,
+    )
+
+    section = envelope.section.model_copy(
+        update={
+            "blocks": [
+                item.model_copy(update={"decision_ids": [*item.decision_ids, decision_id]})
+                for item in envelope.section.blocks
+            ],
+            "rules": [
+                item.model_copy(update={"decision_ids": [*item.decision_ids, decision_id]})
+                for item in envelope.section.rules
+            ],
+            "tokens": [
+                item.model_copy(update={"decision_ids": [*item.decision_ids, decision_id]})
+                for item in envelope.section.tokens
+            ],
+            "examples": [
+                item.model_copy(update={"decision_ids": [*item.decision_ids, decision_id]})
+                for item in envelope.section.examples
+            ],
+            "patterns": [
+                item.model_copy(update={"decision_ids": [*item.decision_ids, decision_id]})
+                for item in envelope.section.patterns
+            ],
+        }
+    )
+    return section, evidence, decision
 
 
 class GenerationOrchestrator:
@@ -146,14 +215,28 @@ class GenerationOrchestrator:
                         raise ValueError("prompt version mismatch")
                     if envelope.section_id != state.section_id:
                         raise ValueError("section identity mismatch")
+                    generated, evidence, decision = _record_generated_decision(
+                        envelope,
+                        run=run,
+                        model=selected_model,
+                        recorded_at=self._clock(),
+                    )
                     sections = [
-                        envelope.section if item.id == state.section_id else item
+                        generated if item.id == state.section_id else item
                         for item in draft.sections
                     ]
                     payload = draft.model_dump(mode="json")
                     payload.update(
                         {
                             "sections": [item.model_dump(mode="json") for item in sections],
+                            "evidence": [
+                                *[item.model_dump(mode="json") for item in draft.evidence],
+                                evidence.model_dump(mode="json"),
+                            ],
+                            "decisions": [
+                                *[item.model_dump(mode="json") for item in draft.decisions],
+                                decision.model_dump(mode="json"),
+                            ],
                             "revision": draft.revision + 1,
                         }
                     )

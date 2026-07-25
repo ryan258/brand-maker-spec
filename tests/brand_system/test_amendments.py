@@ -29,30 +29,39 @@ def client(tmp_path: Path) -> TestClient:
 def published(api: TestClient) -> tuple[str, dict[str, object]]:
     draft = api.post(
         "/api/brand-systems",
-        json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        json={
+            "brand_name": "Northstar",
+            "brand_context": "A complete brand for independent neighborhood bookstores.",
+            "owner_name": "Ryan",
+        },
     ).json()
-    section = draft["sections"][0]
-    section["blocks"] = [
-        {
-            "id": "block.strategy.purpose",
-            "type": "paragraph",
-            "text": "A clear strategic purpos.",
-            "references": [],
-            "heading_level": None,
-        }
-    ]
-    draft = api.patch(
-        f"/api/brand-systems/{draft['brand_id']}/sections/{section['id']}",
-        json={"expected_revision": 1, "section": section},
-    ).json()
+    for section in draft["sections"]:
+        slug = section["id"].removeprefix("section.")
+        section["status"] = "reviewed"
+        section["blocks"] = [
+            {
+                "id": "block.strategy.purpose" if slug == "strategy" else f"block.{slug}.guidance",
+                "type": "paragraph",
+                "text": (
+                    "A clear strategic purpos."
+                    if slug == "strategy"
+                    else f"Reviewed and accepted {section['title']} guidance."
+                ),
+                "references": [],
+            }
+        ]
+        draft = api.patch(
+            f"/api/brand-systems/{draft['brand_id']}/sections/{section['id']}",
+            json={"expected_revision": draft["revision"], "section": section},
+        ).json()
     api.post(
         f"/api/brand-systems/{draft['brand_id']}/approvals",
-        json={"expected_revision": 2, "rationale": "Ready."},
+        json={"expected_revision": draft["revision"], "rationale": "Ready."},
     )
     version = api.post(
         f"/api/brand-systems/{draft['brand_id']}/versions",
         json={
-            "expected_revision": 2,
+            "expected_revision": draft["revision"],
             "version": "1.0.0",
             "change_summary": "Initial publcation.",
         },

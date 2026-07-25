@@ -156,6 +156,15 @@ async def test_complete_run_persists_every_section_and_finishes(tmp_path: Path) 
     assert stored is not None
     assert stored.revision == 1 + len(SECTION_CATALOG)
     assert all(section.status == "draft" for section in stored.sections)
+    assert len(stored.evidence) == len(SECTION_CATALOG)
+    assert len(stored.decisions) == len(SECTION_CATALOG)
+    strategy_decision = stored.decisions[0]
+    assert strategy_decision.rationale == "A bounded generated starting point."
+    assert strategy_decision.provenance == "model-inference"
+    assert strategy_decision.generation_run_id == f"run.{run.id.hex}"
+    assert strategy_decision.prompt_version == "living-brand-section-v2"
+    assert strategy_decision.model == "test-model"
+    assert stored.sections[0].blocks[0].decision_ids == [strategy_decision.id]
 
 
 async def test_failed_run_resumes_without_repeating_accepted_work(tmp_path: Path) -> None:

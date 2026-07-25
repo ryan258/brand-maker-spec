@@ -56,9 +56,15 @@ from brand_maker.brand_system.models import (
 )
 from brand_maker.brand_system.publication import (
     DraftNotApproved,
+    DraftNotReady,
     PublicationDraftNotFound,
     PublishedVersionExists,
     SQLitePublicationRepository,
+)
+from brand_maker.brand_system.readiness import (
+    ReadinessReport,
+    ReadinessRequest,
+    assess_readiness,
 )
 from brand_maker.brand_system.repository import (
     SQLiteBrandSystemRepository,
@@ -784,6 +790,22 @@ def create_app(
             raise HTTPException(status_code=404, detail="Brand system not found.")
         return draft
 
+    @app.post(
+        "/api/brand-systems/{brand_id}/readiness",
+        response_model=ReadinessReport,
+        tags=["living brand systems"],
+    )
+    async def assess_brand_system_readiness(
+        brand_id: UUID, payload: ReadinessRequest, request: Request
+    ) -> ReadinessReport:
+        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+        draft = await run_in_threadpool(store.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Brand system not found.")
+        if draft.revision != payload.expected_revision:
+            raise HTTPException(status_code=409, detail="Draft revision conflict.")
+        return assess_readiness(draft, payload.target)
+
     @app.patch(
         "/api/brand-systems/{brand_id}/sections/{section_id}",
         response_model=WorkingDraft,
@@ -1162,6 +1184,10 @@ def create_app(
             )
         except PublicationDraftNotFound:
             raise HTTPException(status_code=404, detail="Brand system not found.") from None
+        except DraftNotReady:
+            raise HTTPException(
+                status_code=409, detail="Current draft is not ready for approval."
+            ) from None
         except DraftNotApproved:
             raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
 
@@ -1187,6 +1213,10 @@ def create_app(
             )
         except PublicationDraftNotFound:
             raise HTTPException(status_code=404, detail="Brand system not found.") from None
+        except DraftNotReady:
+            raise HTTPException(
+                status_code=409, detail="Current draft is not ready for publication."
+            ) from None
         except DraftNotApproved:
             raise HTTPException(
                 status_code=409, detail="Current draft revision is not approved."

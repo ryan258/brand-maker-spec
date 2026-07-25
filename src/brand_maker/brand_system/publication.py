@@ -16,6 +16,7 @@ from brand_maker.brand_system.models import (
     PublishedVersion,
     WorkingDraft,
 )
+from brand_maker.brand_system.readiness import assess_readiness
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS brand_system_approvals (
@@ -39,6 +40,10 @@ class PublicationConflict(RuntimeError):
 
 
 class DraftNotApproved(PublicationConflict):
+    pass
+
+
+class DraftNotReady(PublicationConflict):
     pass
 
 
@@ -86,6 +91,8 @@ class SQLitePublicationRepository:
             if int(row[1]) != expected_revision:
                 raise DraftNotApproved
             draft = WorkingDraft.model_validate_json(row[0])
+            if not assess_readiness(draft, "approved").can_advance:
+                raise DraftNotReady
             record = ApprovalRecord(
                 id=self._id_factory(),
                 brand_id=brand_id,
@@ -148,6 +155,8 @@ class SQLitePublicationRepository:
                 raise DraftNotApproved
             if any(asset.required and asset.storage != "managed" for asset in draft.assets):
                 raise DraftNotApproved
+            if not assess_readiness(draft, "approved").can_advance:
+                raise DraftNotReady
             canonical = json.dumps(
                 draft.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
             )

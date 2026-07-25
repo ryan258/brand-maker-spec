@@ -33,6 +33,32 @@ def create_workspace(api: TestClient) -> dict[str, object]:
     ).json()
 
 
+def create_ready_workspace(api: TestClient) -> dict[str, object]:
+    draft = api.post(
+        "/api/brand-systems",
+        json={
+            "brand_name": "Northstar",
+            "brand_context": "A complete brand for independent neighborhood bookstores.",
+            "owner_name": "Ryan",
+        },
+    ).json()
+    for section in draft["sections"]:
+        section["status"] = "reviewed"
+        section["blocks"] = [
+            {
+                "id": f"block.{section['id'].removeprefix('section.')}.guidance",
+                "type": "paragraph",
+                "text": f"Reviewed and accepted {section['title']} guidance.",
+                "references": [],
+            }
+        ]
+        draft = api.patch(
+            f"/api/brand-systems/{draft['brand_id']}/sections/{section['id']}",
+            json={"expected_revision": draft["revision"], "section": section},
+        ).json()
+    return draft
+
+
 def test_publication_requires_exact_revision_approval(tmp_path: Path) -> None:
     with client(tmp_path) as api:
         draft = create_workspace(api)
@@ -49,17 +75,32 @@ def test_publication_requires_exact_revision_approval(tmp_path: Path) -> None:
     assert response.json() == {"detail": "Current draft revision is not approved."}
 
 
-def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -> None:
+def test_empty_workspace_cannot_be_approved_as_a_complete_brand(tmp_path: Path) -> None:
     with client(tmp_path) as api:
         draft = create_workspace(api)
+        response = api.post(
+            f"/api/brand-systems/{draft['brand_id']}/approvals",
+            json={"expected_revision": 1, "rationale": "Looks complete."},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Current draft is not ready for approval."}
+
+
+def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -> None:
+    with client(tmp_path) as api:
+        draft = create_ready_workspace(api)
         approval = api.post(
             f"/api/brand-systems/{draft['brand_id']}/approvals",
-            json={"expected_revision": 1, "rationale": "Ready for local use."},
+            json={
+                "expected_revision": draft["revision"],
+                "rationale": "Ready for local use.",
+            },
         )
         published = api.post(
             f"/api/brand-systems/{draft['brand_id']}/versions",
             json={
-                "expected_revision": 1,
+                "expected_revision": draft["revision"],
                 "version": "1.0.0",
                 "change_summary": "Initial publication.",
             },
@@ -68,18 +109,18 @@ def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -
         duplicate = api.post(
             f"/api/brand-systems/{draft['brand_id']}/versions",
             json={
-                "expected_revision": 1,
+                "expected_revision": draft["revision"],
                 "version": "1.0.0",
                 "change_summary": "Overwrite attempt.",
             },
         )
 
     assert approval.status_code == 201
-    assert approval.json()["draft_revision"] == 1
+    assert approval.json()["draft_revision"] == draft["revision"]
     assert published.status_code == 201
     payload = published.json()
     assert payload["version"] == "1.0.0"
-    assert payload["draft_revision"] == 1
+    assert payload["draft_revision"] == draft["revision"]
     assert len(payload["content_hash"]) == 64
     assert payload["manifest"]["section_ids"][0] == "section.strategy"
     assert payload["approvals"][0]["rationale"] == "Ready for local use."
@@ -90,16 +131,16 @@ def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -
 
 def test_edit_after_approval_invalidates_publication_authority(tmp_path: Path) -> None:
     with client(tmp_path) as api:
-        draft = create_workspace(api)
+        draft = create_ready_workspace(api)
         api.post(
             f"/api/brand-systems/{draft['brand_id']}/approvals",
-            json={"expected_revision": 1, "rationale": "Looks good."},
+            json={"expected_revision": draft["revision"], "rationale": "Looks good."},
         )
         section = draft["sections"][0]
         section["status"] = "draft"
         updated = api.patch(
             f"/api/brand-systems/{draft['brand_id']}/sections/{section['id']}",
-            json={"expected_revision": 1, "section": section},
+            json={"expected_revision": draft["revision"], "section": section},
         ).json()
         publication = api.post(
             f"/api/brand-systems/{draft['brand_id']}/versions",

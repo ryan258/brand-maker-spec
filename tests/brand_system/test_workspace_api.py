@@ -108,6 +108,34 @@ def test_create_list_and_get_local_workspace(tmp_path: Path) -> None:
     assert listing.json()["items"][0]["brand_id"] == brand_id
 
 
+def test_workspace_readiness_reports_visible_blockers_and_checks_revision(
+    tmp_path: Path,
+) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        created = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar Studio", "owner_name": "Ryan"},
+        ).json()
+        report = api.post(
+            f"/api/brand-systems/{created['brand_id']}/readiness",
+            json={"expected_revision": 1, "target": "approved"},
+        )
+        stale = api.post(
+            f"/api/brand-systems/{created['brand_id']}/readiness",
+            json={"expected_revision": 2, "target": "approved"},
+        )
+
+    assert report.status_code == 200
+    assert report.json()["can_advance"] is False
+    assert "brand.context.required" in {
+        finding["code"] for finding in report.json()["findings"]
+    }
+    assert stale.status_code == 409
+    assert stale.json() == {"detail": "Draft revision conflict."}
+
+
 def test_workspace_preserves_optional_long_form_brand_context(tmp_path: Path) -> None:
     test_client, _ = client(tmp_path)
     context = (

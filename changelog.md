@@ -4,6 +4,13 @@
 
 ### Added
 
+- Added canonical raw-idea, named-concept, existing-project, and quick-start entry
+  paths with adaptive assistance and controlled-research metadata.
+- Added durable evidence and decision records so generated guidance retains rationale,
+  provenance, confidence explanation, prompt version, model, and generation-run identity.
+- Added maturity-aware readiness reports and blocked approval/publication of empty or
+  materially incomplete brand systems.
+
 - **Idea 1:** Moved AI logo generation above the section editor.
 - **Idea 2:** Added inline logo and image thumbnails to the asset list.
 - **Idea 3:** Added debounced section autosave.
@@ -27,3 +34,8 @@
 - **Idea 77:** Added downloadable brand-kit bundles with the bible, tokens, and
   registered production assets.
 - **Idea 99:** Added responsive single-column workshop layouts and wrapping controls.
+
+### Changed
+
+- Reframed the product as a personal brand operating system rather than a parody-only
+  generator; legacy quick-kit fields remain available for compatibility.

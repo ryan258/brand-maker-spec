@@ -12,6 +12,7 @@ from brand_maker.brand_system.models import (
     LocalOwner,
     NarrativeBlock,
     WorkingDraft,
+    WorkspaceBrief,
 )
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository, StaleDraftRevision
 from brand_maker.models import BrandKit
@@ -148,6 +149,14 @@ class BrandSystemService:
             brand_context=request.brand_context,
             owner=LocalOwner(display_name=request.owner_name),
             revision=1,
+            maturity=(
+                "concept" if request.entry_path in {"raw_idea", "quick_start"} else "working"
+            ),
+            brief=WorkspaceBrief(
+                entry_path=request.entry_path,
+                assistance_mode=request.assistance_mode,
+                research_mode=request.research_mode,
+            ),
             sections=_migrated_sections(source) if source is not None else _blank_sections(),
         )
         return self._workspaces.create(draft)

@@ -24,6 +24,21 @@ NarrativeText = Annotated[str, Field(min_length=1, max_length=50_000)]
 ReferenceKind = Literal[
     "section", "block", "rule", "token", "asset", "example", "pattern"
 ]
+EntryPath = Literal["raw_idea", "named_concept", "existing_project", "quick_start"]
+AssistanceMode = Literal["advisor", "copilot", "autonomous"]
+ResearchMode = Literal["local_only", "controlled"]
+WorkspaceMaturity = Literal["concept", "working", "reviewed", "approved"]
+EvidenceKind = Literal["owner", "project", "external", "model-inference", "professional"]
+ConfidenceLevel = Literal["low", "medium", "high"]
+VerificationRequirement = Literal[
+    "none",
+    "owner-review",
+    "professional-review",
+    "legal-review",
+    "accessibility-review",
+    "rights-review",
+]
+VerificationStatus = Literal["unverified", "verified", "waived"]
 BlockType = Literal[
     "paragraph",
     "heading",
@@ -62,6 +77,7 @@ class NarrativeBlock(ContractModel):
     type: BlockType
     text: NarrativeText
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
     heading_level: int | None = Field(default=None, ge=1, le=6)
 
     _reject_html = field_validator("text")(reject_raw_html)
@@ -83,6 +99,7 @@ class BrandRule(ContractModel):
     description: NarrativeText
     enforcement: Literal["advisory", "warning", "blocking"]
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
 
 class BrandToken(ContractModel):
@@ -93,6 +110,7 @@ class BrandToken(ContractModel):
     value_type: Literal["color", "string", "number", "dimension", "duration", "font", "boolean"]
     value: str | float | int | bool
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
 
 class BrandExample(ContractModel):
@@ -102,6 +120,7 @@ class BrandExample(ContractModel):
     kind: Literal["do", "dont", "context"]
     text: NarrativeText
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
     _reject_html = field_validator("text")(reject_raw_html)
 
@@ -150,6 +169,7 @@ class BrandPattern(ContractModel):
     do_guidance: list[NarrativeText] = Field(..., min_length=1, max_length=100)
     dont_guidance: list[NarrativeText] = Field(..., min_length=1, max_length=100)
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
     _reject_summary_html = field_validator("summary")(reject_raw_html)
 
@@ -170,6 +190,7 @@ class AssetRegistration(ContractModel):
     content_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     source_path: str | None = Field(default=None, max_length=4096)
     required: bool = True
+    decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_storage_location(self) -> Self:
@@ -226,6 +247,53 @@ class GenerateLogoVariantsRequest(CreateAssetDerivativeRequest):
 SectionStatus = Literal["incomplete", "draft", "reviewed", "approved"]
 
 
+class WorkspaceBrief(ContractModel):
+    """Incrementally completed discovery context for one personal project."""
+
+    entry_path: EntryPath = "named_concept"
+    assistance_mode: AssistanceMode = "copilot"
+    research_mode: ResearchMode = "controlled"
+    objective: NarrativeText | None = None
+    audience: NarrativeText | None = None
+    category: NarrativeText | None = None
+    competitors: list[ShortText] = Field(default_factory=list, max_length=100)
+    differentiators: list[NarrativeText] = Field(default_factory=list, max_length=100)
+    existing_equity: NarrativeText | None = None
+    constraints: list[NarrativeText] = Field(default_factory=list, max_length=100)
+    stakeholders: list[ShortText] = Field(default_factory=list, max_length=100)
+    locales: list[ShortText] = Field(default_factory=list, max_length=100)
+    success_measures: list[NarrativeText] = Field(default_factory=list, max_length=100)
+    unresolved_questions: list[NarrativeText] = Field(default_factory=list, max_length=100)
+
+
+class EvidenceSource(ContractModel):
+    """Immutable origin record for facts or observations used by brand decisions."""
+
+    id: StableId
+    kind: EvidenceKind
+    title: ShortText
+    summary: NarrativeText
+    locator: str | None = Field(default=None, max_length=4096)
+    retrieved_at: datetime
+
+
+class DecisionRecord(ContractModel):
+    """Rationale and authority metadata for one important brand recommendation."""
+
+    id: StableId
+    decision_type: StableId
+    rationale: NarrativeText
+    provenance: EvidenceKind
+    source_ids: list[StableId] = Field(default_factory=list, max_length=100)
+    confidence: ConfidenceLevel
+    confidence_explanation: NarrativeText
+    verification_requirement: VerificationRequirement = "owner-review"
+    verification_status: VerificationStatus = "unverified"
+    generation_run_id: StableId | None = None
+    prompt_version: ShortText | None = None
+    model: ShortText | None = None
+
+
 class BrandSection(ContractModel):
     """One independently editable and lockable part of a working draft."""
 
@@ -251,6 +319,10 @@ class WorkingDraft(ContractModel):
     owner: LocalOwner
     revision: int = Field(..., ge=1)
     status: Literal["draft", "reviewed", "approved"] = "draft"
+    maturity: WorkspaceMaturity = "working"
+    brief: WorkspaceBrief = Field(default_factory=WorkspaceBrief)
+    evidence: list[EvidenceSource] = Field(default_factory=list, max_length=10_000)
+    decisions: list[DecisionRecord] = Field(default_factory=list, max_length=10_000)
     sections: list[BrandSection] = Field(default_factory=list, max_length=100)
     assets: list[AssetRegistration] = Field(default_factory=list, max_length=1_000)
 
@@ -264,6 +336,8 @@ class WorkingDraft(ContractModel):
             "example": [example.id for section in self.sections for example in section.examples],
             "pattern": [pattern.id for section in self.sections for pattern in section.patterns],
             "asset": [asset.id for asset in self.assets],
+            "evidence": [source.id for source in self.evidence],
+            "decision": [decision.id for decision in self.decisions],
         }
         require_unique_ids(canonical_id for ids in entities.values() for canonical_id in ids)
         known_by_kind = {kind: set(ids) for kind, ids in entities.items()}
@@ -310,6 +384,50 @@ class WorkingDraft(ContractModel):
             for token in section.tokens
         }
         require_acyclic_token_graph(token_graph)
+
+        known_evidence = set(entities["evidence"])
+        for decision in self.decisions:
+            missing = set(decision.source_ids) - known_evidence
+            if missing:
+                raise ValueError(f"unknown evidence source: {sorted(missing)[0]}")
+
+        known_decisions = set(entities["decision"])
+        decision_references = [
+            decision_id
+            for section in self.sections
+            for block in section.blocks
+            for decision_id in block.decision_ids
+        ]
+        decision_references.extend(
+            decision_id
+            for section in self.sections
+            for rule in section.rules
+            for decision_id in rule.decision_ids
+        )
+        decision_references.extend(
+            decision_id
+            for section in self.sections
+            for token in section.tokens
+            for decision_id in token.decision_ids
+        )
+        decision_references.extend(
+            decision_id
+            for section in self.sections
+            for example in section.examples
+            for decision_id in example.decision_ids
+        )
+        decision_references.extend(
+            decision_id
+            for section in self.sections
+            for pattern in section.patterns
+            for decision_id in pattern.decision_ids
+        )
+        decision_references.extend(
+            decision_id for asset in self.assets for decision_id in asset.decision_ids
+        )
+        missing_decisions = set(decision_references) - known_decisions
+        if missing_decisions:
+            raise ValueError(f"unknown decision record: {sorted(missing_decisions)[0]}")
         return self
 
 
@@ -344,6 +462,9 @@ class CreateWorkspaceRequest(ContractModel):
     brand_context: NarrativeText | None = None
     owner_name: ShortText
     source_brand_id: UUID | None = None
+    entry_path: EntryPath = "named_concept"
+    assistance_mode: AssistanceMode = "copilot"
+    research_mode: ResearchMode = "controlled"
 
     @model_validator(mode="after")
     def require_one_source(self) -> Self:
