@@ -38,9 +38,7 @@ def section_messages(
             "name": "display name",
             "kind": "one required_pattern_kinds value",
             "summary": "actionable purpose and use",
-            "specifications": [
-                {"label": "dimension", "value": "specific guidance"}
-            ],
+            "specifications": [{"label": "dimension", "value": "specific guidance"}],
             "do_guidance": ["approved action or example"],
             "dont_guidance": ["prohibited action or example"],
             "references": [],
@@ -50,5 +48,66 @@ def section_messages(
     }
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+
+
+FIELD_REGEN_PROMPT = (
+    "You regenerate a single narrative text field or block within a section.\n"
+    "Return a JSON object with keys: 'rationale' and 'text'.\n"
+    "Keep the response specific, aligned with brand context, and free of raw HTML or scripts."
+)
+
+
+def field_regeneration_messages(
+    *,
+    brand_name: str,
+    section_title: str,
+    field_label: str,
+    current_text: str,
+    brand_context: str | None = None,
+    instruction: str | None = None,
+) -> list[dict[str, str]]:
+    payload = {
+        "brand_name": brand_name,
+        "brand_context": brand_context,
+        "section_title": section_title,
+        "field_label": field_label,
+        "current_text": current_text,
+        "owner_instruction": instruction
+        or "Refine for clarity, punchiness, and strong brand voice.",
+    }
+    return [
+        {"role": "system", "content": FIELD_REGEN_PROMPT},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+
+
+VARIANT_PROMPT = (
+    "You generate a single candidate section variant for a living brand system.\n"
+    "Return one JSON section envelope with prompt_version, section_id, rationale, and section.\n"
+    "Adopt the single requested posture while satisfying every content requirement."
+)
+
+
+def variant_generation_messages(
+    *,
+    definition: SectionDefinition,
+    brand_name: str,
+    brand_context: str | None = None,
+    postures: list[str] | None = None,
+) -> list[dict[str, str]]:
+    postures = postures or ["conservative", "balanced", "bold"]
+    payload = {
+        "prompt_version": PROMPT_VERSION,
+        "brand_name": brand_name,
+        "brand_context": brand_context,
+        "section_id": definition.id,
+        "section_title": definition.title,
+        "content_requirements": content_requirements(definition.id),
+        "requested_postures": postures,
+    }
+    return [
+        {"role": "system", "content": VARIANT_PROMPT},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]

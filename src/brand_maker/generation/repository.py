@@ -35,6 +35,29 @@ class StartGenerationRequest(ContractModel):
     target_section_id: str | None = None
 
 
+class RegenerateFieldRequest(ContractModel):
+    field_label: str = Field("narrative", min_length=1, max_length=300)
+    current_text: str = Field("", max_length=50_000)
+    instruction: str | None = Field(default=None, max_length=5_000)
+    model: str | None = Field(default=None, min_length=1, max_length=300)
+
+
+GenerationPosture = Literal["conservative", "balanced", "bold"]
+
+
+def _default_generation_postures() -> list[GenerationPosture]:
+    return ["conservative", "balanced", "bold"]
+
+
+class GenerateSectionVariantsRequest(ContractModel):
+    postures: list[GenerationPosture] = Field(
+        default_factory=_default_generation_postures,
+        min_length=1,
+        max_length=3,
+    )
+    model: str | None = Field(default=None, min_length=1, max_length=300)
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS generation_runs (
     id TEXT PRIMARY KEY, brand_id TEXT NOT NULL, status TEXT NOT NULL,

@@ -1,7 +1,8 @@
 """Bounded, resumable orchestration for canonical section generation."""
 
 import asyncio
-from collections.abc import Callable
+import json
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
@@ -100,6 +101,15 @@ def _record_generated_decision(
     return section, evidence, decision
 
 
+def _safe_put(queue: asyncio.Queue[dict[str, object]], event: dict[str, object]) -> None:
+    try:
+        if queue.full():
+            queue.get_nowait()
+        queue.put_nowait(event)
+    except (asyncio.QueueEmpty, asyncio.QueueFull):
+        pass
+
+
 class GenerationOrchestrator:
     def __init__(
         self,
@@ -114,6 +124,56 @@ class GenerationOrchestrator:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._id_factory = id_factory
         self._run_locks: dict[UUID, asyncio.Lock] = {}
+        self._listeners: dict[UUID, list[asyncio.Queue[dict[str, object]]]] = {}
+
+    def subscribe(self, run_id: UUID) -> asyncio.Queue[dict[str, object]]:
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=1)
+        self._listeners.setdefault(run_id, []).append(queue)
+        run = self._runs.get(run_id)
+        if run is None:
+            self.unsubscribe(run_id, queue)
+            raise GenerationRunNotFound
+        _safe_put(queue, self._event(run))
+        return queue
+
+    def unsubscribe(self, run_id: UUID, queue: asyncio.Queue[dict[str, object]]) -> None:
+        if run_id in self._listeners:
+            try:
+                self._listeners[run_id].remove(queue)
+            except ValueError:
+                pass
+            if not self._listeners[run_id]:
+                del self._listeners[run_id]
+
+    def _notify(self, run: GenerationRun) -> None:
+        if run.id in self._listeners:
+            event = self._event(run)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            for queue in list(self._listeners[run.id]):
+                if loop and loop.is_running():
+                    loop.call_soon_threadsafe(_safe_put, queue, event)
+                else:
+                    _safe_put(queue, event)
+
+    @staticmethod
+    def _event(run: GenerationRun) -> dict[str, object]:
+        return {
+            "run_id": str(run.id),
+            "status": run.status,
+            "cursor": run.cursor,
+            "total_sections": len(run.sections),
+            "sections": [section.model_dump(mode="json") for section in run.sections],
+            "updated_at": run.updated_at.isoformat(),
+        }
+
+    def _save_and_notify(self, run: GenerationRun) -> GenerationRun:
+        saved = self._runs.save(run)
+        self._notify(saved)
+        return saved
 
     def start(
         self,
@@ -133,7 +193,7 @@ class GenerationOrchestrator:
             needed = set(definition.prerequisites) | {target_section_id}
             requested = [section_id for section_id in SECTION_CATALOG if section_id in needed]
         now = self._clock()
-        return self._runs.save(
+        return self._save_and_notify(
             GenerationRun(
                 id=self._id_factory(),
                 brand_id=draft.brand_id,
@@ -160,7 +220,7 @@ class GenerationOrchestrator:
         if run.status in {"cancelled", "completed"}:
             return run
         run = run.model_copy(update={"status": "running", "updated_at": self._clock()})
-        self._runs.save(run)
+        self._save_and_notify(run)
         while run.cursor < len(run.sections):
             persisted = self._runs.get(run.id)
             if persisted is None:
@@ -172,9 +232,7 @@ class GenerationOrchestrator:
             if draft is None:
                 raise GenerationRunNotFound
             definition = SECTION_CATALOG[state.section_id]
-            current_section = next(
-                item for item in draft.sections if item.id == state.section_id
-            )
+            current_section = next(item for item in draft.sections if item.id == state.section_id)
             if current_section.locked:
                 states = list(run.sections)
                 states[run.cursor] = state.model_copy(
@@ -187,7 +245,7 @@ class GenerationOrchestrator:
                         "updated_at": self._clock(),
                     }
                 )
-                self._runs.save(run)
+                self._save_and_notify(run)
                 continue
             accepted = False
             last_error = "Section generation failed validation."
@@ -258,7 +316,7 @@ class GenerationOrchestrator:
                 run = run.model_copy(
                     update={"sections": states, "status": "failed", "updated_at": self._clock()}
                 )
-                return self._runs.save(run)
+                return self._save_and_notify(run)
             states[run.cursor] = state.model_copy(update={"status": "accepted", "error": None})
             run = run.model_copy(
                 update={
@@ -267,9 +325,9 @@ class GenerationOrchestrator:
                     "updated_at": self._clock(),
                 }
             )
-            self._runs.save(run)
+            self._save_and_notify(run)
         run = run.model_copy(update={"status": "completed", "updated_at": self._clock()})
-        return self._runs.save(run)
+        return self._save_and_notify(run)
 
     def pause(self, run_id: UUID) -> GenerationRun:
         return self._set_terminal_control(run_id, "paused")
@@ -288,4 +346,89 @@ class GenerationOrchestrator:
         controlled = GenerationRun.model_validate(
             {**run.model_dump(mode="json"), "status": status, "updated_at": self._clock()}
         )
-        return self._runs.save(controlled)
+        return self._save_and_notify(controlled)
+
+    async def regenerate_field(
+        self,
+        *,
+        draft: WorkingDraft,
+        section_id: str,
+        field_label: str,
+        current_text: str,
+        instruction: str | None = None,
+        model: str,
+        completer: Completer,
+    ) -> dict[str, str]:
+        """Regenerate a single narrative field/block using LLM assistance (Idea 12)."""
+        from brand_maker.generation.prompts import field_regeneration_messages
+
+        section = next((s for s in draft.sections if s.id == section_id), None)
+        section_title = section.title if section else section_id
+        messages = field_regeneration_messages(
+            brand_name=draft.brand_name,
+            brand_context=draft.brand_context,
+            section_title=section_title,
+            field_label=field_label,
+            current_text=current_text,
+            instruction=instruction,
+        )
+        raw = await completer.complete(
+            messages=messages, model=model, temperature=0.7, max_tokens=1000
+        )
+        try:
+            parsed = extract_json_object(raw)
+            data = json.loads(parsed)
+            if not isinstance(data, dict):
+                raise ValueError("Expected JSON object")
+            return {
+                "rationale": str(
+                    data.get("rationale", "Field regenerated based on owner instruction.")
+                ),
+                "text": str(data.get("text", current_text)),
+            }
+        except (NoJSONObject, json.JSONDecodeError, ValueError):
+            return {
+                "rationale": "Field regeneration fell back to original text.",
+                "text": current_text,
+            }
+
+    async def generate_section_variants(
+        self,
+        *,
+        draft: WorkingDraft,
+        section_id: str,
+        postures: Sequence[str] | None = None,
+        model: str,
+        completer: Completer,
+    ) -> list[dict[str, object]]:
+        """Generate 2-3 candidate section variants for user comparison (Idea 15)."""
+        from brand_maker.generation.prompts import variant_generation_messages
+
+        definition = SECTION_CATALOG.get(section_id)
+        if definition is None:
+            raise ValueError("unknown generation section")
+
+        postures = postures or ["conservative", "balanced", "bold"]
+        variants: list[dict[str, object]] = []
+        for posture in postures:
+            messages = variant_generation_messages(
+                definition=definition,
+                brand_name=draft.brand_name,
+                brand_context=draft.brand_context,
+                postures=[posture],
+            )
+            try:
+                raw = await completer.complete(
+                    messages=messages, model=model, temperature=0.7, max_tokens=2500
+                )
+                envelope = GeneratedSectionEnvelope.model_validate_json(extract_json_object(raw))
+                variants.append(
+                    {
+                        "posture": posture,
+                        "rationale": envelope.rationale,
+                        "section": envelope.section.model_dump(mode="json"),
+                    }
+                )
+            except (NoJSONObject, ValidationError, ValueError):
+                continue
+        return variants
