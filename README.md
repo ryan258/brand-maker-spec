@@ -46,7 +46,9 @@ The living-brand workflow is:
 1. Create a workspace from a raw idea, named concept, existing project, or saved quick
    kit, then add whatever founding context is already known. The structured brief saves
    incrementally and offers starter answers to reduce typing.
-2. Edit sections manually or generate a complete/selected starting point.
+2. Edit sections manually or generate a complete/selected starting point. Generation
+   obeys the founding brief; **Update to match brief** regenerates unlocked sections to
+   obey the current brief while preserving locked ones.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
    assets; preview its brand-token dark mode, follow the active table of contents,

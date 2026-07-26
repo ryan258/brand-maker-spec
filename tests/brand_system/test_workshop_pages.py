@@ -75,6 +75,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'id="evidence-privacy"' in page.text
     assert 'id="editor-status" role="status" aria-live="polite"' in page.text
     assert '<label for="derivative-source">Source raster logo</label>' in page.text
+    assert 'id="generate-to-brief" type="button"' in page.text
+    assert 'getElementById("generate-to-brief")' in script.text
     assert 'id="create-favicon-set" type="button"' in page.text
     assert 'id="create-logo-variants" type="button"' in page.text
     assert 'id="create-vector" type="button"' in page.text

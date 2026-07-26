@@ -3,9 +3,14 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from brand_maker.brand_system.models import BrandSection, LocalOwner, WorkingDraft
+from brand_maker.brand_system.models import (
+    BrandSection,
+    LocalOwner,
+    WorkingDraft,
+    WorkspaceBrief,
+)
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
-from brand_maker.generation.orchestrator import GenerationOrchestrator
+from brand_maker.generation.orchestrator import GenerationOrchestrator, _founding_brief
 from brand_maker.generation.repository import SQLiteGenerationRepository
 from brand_maker.generation.sections import SECTION_CATALOG
 from brand_maker.openrouter import ModelUnavailable
@@ -226,3 +231,38 @@ async def test_duplicate_resume_commands_share_one_bounded_run(tmp_path: Path) -
 
     assert first.status == second.status == "completed"
     assert completer.calls == ["section.strategy"]
+
+
+def _draft_with_brief(brief: WorkspaceBrief) -> WorkingDraft:
+    return WorkingDraft(
+        brand_id=UUID("11111111-1111-1111-1111-111111111111"),
+        brand_name="Acme",
+        owner=LocalOwner(display_name="Owner"),
+        revision=1,
+        brief=brief,
+        sections=[BrandSection(id="section.strategy", title="Strategy", status="draft")],
+    )
+
+
+def test_founding_brief_summarizes_set_fields_with_concept_and_stage() -> None:
+    draft = _draft_with_brief(
+        WorkspaceBrief(
+            objective="Win trust",
+            audience="Small farmers",
+            category="Agtech",
+            differentiators=["local-first"],
+        )
+    )
+    summary = _founding_brief(draft)
+
+    assert summary is not None
+    assert summary["objective"] == "Win trust"
+    assert summary["concept"] == draft.brief.entry_path
+    assert summary["stage"] == draft.maturity
+    assert summary["differentiators"] == ["local-first"]
+
+
+def test_founding_brief_is_skipped_without_substantive_intent() -> None:
+    # A brief with only constraints and no objective/audience/category is nothing to obey.
+    draft = _draft_with_brief(WorkspaceBrief(constraints=["budget under 5k"]))
+    assert _founding_brief(draft) is None

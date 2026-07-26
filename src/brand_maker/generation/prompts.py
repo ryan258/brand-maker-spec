@@ -24,24 +24,33 @@ def section_messages(
     brand_name: str,
     accepted_context: Mapping[str, object],
     brand_context: str | None = None,
+    founding_brief: Mapping[str, object] | None = None,
 ) -> list[dict[str, str]]:
+    shape_rules = [
+        "Every object must use EXACTLY the keys shown in its contract below. "
+        "Do not rename keys, do not add keys (no 'type' on tokens, no 'note', "
+        "no 'purpose', no 'summary' on examples).",
+        "Tokens use 'value_type' (not 'type') and always include an 'id'.",
+        "A block with type 'heading' must include heading_level (2-4); "
+        "other block types must omit heading_level. Prefer 'paragraph' blocks.",
+        "Produce exactly the required counts; do not append extra, half-filled items.",
+    ]
+    if founding_brief:
+        shape_rules.append(
+            "Obey founding_brief: this section must serve its objective, speak to its "
+            "audience, fit its category, honor its differentiators, and respect its "
+            "constraints. Match the concept and stage. Do not contradict the brief."
+        )
     payload = {
         "prompt_version": PROMPT_VERSION,
         "brand_name": brand_name,
         "brand_context": brand_context,
+        "founding_brief": dict(founding_brief) if founding_brief else None,
         "section_id": definition.id,
         "section_title": definition.title,
         "section_purpose": definition.purpose,
         "content_requirements": content_requirements(definition.id),
-        "shape_rules": [
-            "Every object must use EXACTLY the keys shown in its contract below. "
-            "Do not rename keys, do not add keys (no 'type' on tokens, no 'note', "
-            "no 'purpose', no 'summary' on examples).",
-            "Tokens use 'value_type' (not 'type') and always include an 'id'.",
-            "A block with type 'heading' must include heading_level (2-4); "
-            "other block types must omit heading_level. Prefer 'paragraph' blocks.",
-            "Produce exactly the required counts; do not append extra, half-filled items.",
-        ],
+        "shape_rules": shape_rules,
         "section_contract": {
             "id": "the exact section_id provided above",
             "title": "the exact section_title provided above",

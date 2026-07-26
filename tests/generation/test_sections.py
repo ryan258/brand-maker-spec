@@ -248,6 +248,31 @@ def test_envelope_still_rejects_genuine_injected_keys() -> None:
         GeneratedSectionEnvelope.model_validate(payload)
 
 
+def test_section_prompt_includes_founding_brief_when_provided() -> None:
+    brief = {"objective": "Win trust", "audience": "Small farmers", "category": "Agtech"}
+    messages = section_messages(
+        definition=SECTION_CATALOG["section.strategy"],
+        brand_name="Acme",
+        accepted_context={},
+        founding_brief=brief,
+    )
+    payload = json.loads(messages[1]["content"])
+    assert payload["founding_brief"] == brief
+    assert any("Obey founding_brief" in rule for rule in payload["shape_rules"])
+
+
+def test_section_prompt_omits_brief_instruction_without_a_brief() -> None:
+    payload = json.loads(
+        section_messages(
+            definition=SECTION_CATALOG["section.strategy"],
+            brand_name="Acme",
+            accepted_context={},
+        )[1]["content"]
+    )
+    assert payload["founding_brief"] is None
+    assert not any("Obey founding_brief" in rule for rule in payload["shape_rules"])
+
+
 def test_generated_section_rejects_shallow_brand_guidance() -> None:
     payload = envelope()
     payload["section"]["blocks"] = []  # type: ignore[index]

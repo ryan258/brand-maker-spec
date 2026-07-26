@@ -71,6 +71,11 @@ Scroll down past the brief to find the **Generate a starting point** card.
 3. Scroll back up to *Generate a starting point* and click **`Generate selected section`**.
 4. The AI will synthesize only that specific section based on your brief and any previously completed sections.
 
+### Option C: Re-align an Existing Brand to the Brief
+* Click the **`Update to match brief`** button after editing your founding brief.
+* Every **unlocked** section is regenerated so its objective, audience, category, differentiators, constraints, concept, and stage obey the current brief. Locked sections are preserved.
+* This replaces unlocked section content, so lock or approve anything you want to keep first.
+
 ---
 
 ## Step 5: Review, Edit, and Lock Your Brand System
@@ -112,6 +117,7 @@ Locate the **Logos and production assets** card:
 - [x] Create workspace
 - [x] Use starter buttons in Founding Brief
 - [x] Click **`Generate complete draft`** to auto-fill missing sections
+- [x] Click **`Update to match brief`** to re-align unlocked sections after editing the brief
 - [x] Review & edit sections in the Section Editor
 - [x] Generate logo & asset variants
 - [x] View and print your complete Brand Bible

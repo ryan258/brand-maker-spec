@@ -16,6 +16,11 @@
   existing projects, with explicit advisor/copilot/autonomous and research boundaries.
 - Added an incrementally autosaved structured brief with low-typing starter answers,
   plus evidence intake that preserves source type and visible privacy state.
+- Made section generation obey the founding brief: the brief's objective, audience,
+  category, differentiators, constraints, existing equity, and success measures, plus
+  the workspace concept and maturity stage, are supplied to every section-generation
+  request. Added an **Update to match brief** control that regenerates unlocked
+  sections to obey the current brief while preserving locked sections.
 
 - **Idea 1:** Moved AI logo generation above the section editor.
 - **Idea 2:** Added inline logo and image thumbnails to the asset list.
@@ -62,6 +67,18 @@
 - **Idea 94:** Added portable per-brand workspace backups with bounded ZIP parsing,
   manifest checksums, asset-integrity validation, and conflict-safe restore.
 - **Idea 99:** Added responsive single-column workshop layouts and wrapping controls.
+
+### Fixed
+
+- Fixed complete-draft generation that could never finish: the section-generation
+  prompt now shows the model the section container and its block, rule, example, token,
+  and pattern contracts, so schema-conforming sections are produced instead of failing
+  `extra="forbid"` validation on every retry.
+- Made the generation envelope strip known prompt-scaffolding keys models echo back
+  (at the envelope root and inside the section) while still rejecting genuine injected
+  keys, so an otherwise-correct section is no longer rejected for an echoed field.
+- Surfaced the real per-attempt validation error on a failed generation section instead
+  of a generic message, and logged it, so generation failures are diagnosable.
 
 ### Changed
 

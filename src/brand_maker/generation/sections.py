@@ -144,6 +144,7 @@ _SCAFFOLD_ECHOES = frozenset(
         "section_title",
         "brand_name",
         "brand_context",
+        "founding_brief",
         "content_requirements",
         "shape_rules",
         "section_contract",

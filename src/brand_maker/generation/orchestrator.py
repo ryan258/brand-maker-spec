@@ -104,6 +104,25 @@ def _record_generated_decision(
     return section, evidence, decision
 
 
+def _founding_brief(draft: WorkingDraft) -> dict[str, object] | None:
+    """Compact set-only view of the founding brief for brief-obeying generation."""
+    brief = draft.brief
+    summary: dict[str, object] = {"concept": brief.entry_path, "stage": draft.maturity}
+    for name in ("objective", "audience", "category", "existing_equity"):
+        value = getattr(brief, name)
+        if value:
+            summary[name] = value
+    for name in ("differentiators", "constraints", "success_measures"):
+        value = getattr(brief, name)
+        if value:
+            summary[name] = list(value)
+    # Only objective/audience/category carry the brief's intent; without them there is
+    # nothing substantive to obey, so skip the field entirely.
+    if not any(k in summary for k in ("objective", "audience", "category")):
+        return None
+    return summary
+
+
 def _safe_put(queue: asyncio.Queue[dict[str, object]], event: dict[str, object]) -> None:
     try:
         if queue.full():
@@ -261,6 +280,7 @@ class GenerationOrchestrator:
                             definition=definition,
                             brand_name=draft.brand_name,
                             brand_context=draft.brand_context,
+                            founding_brief=_founding_brief(draft),
                             accepted_context={
                                 section.id: section.status for section in draft.sections
                             },

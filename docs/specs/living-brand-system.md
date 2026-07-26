@@ -321,7 +321,11 @@ tokens, examples, asset registrations, unresolved decisions, and validation stat
 It may also contain up to 50,000 characters of owner-supplied `brand_context` pasted
 when the workspace is created. This context is trimmed, stored as canonical draft
 data, and supplied as untrusted JSON data to every section-generation request; it
-must never be interpreted as prompt instructions.
+must never be interpreted as prompt instructions. The founding brief's substantive
+fields (objective, audience, category, differentiators, constraints, existing equity,
+success measures) plus the workspace concept and maturity stage are likewise supplied
+as untrusted JSON to every section-generation request so generated sections obey the
+brief; they must never be interpreted as prompt instructions.
 
 ### PublishedVersion
 
