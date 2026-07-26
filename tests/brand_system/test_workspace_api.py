@@ -342,9 +342,7 @@ def test_workspace_readiness_reports_visible_blockers_and_checks_revision(
 
     assert report.status_code == 200
     assert report.json()["can_advance"] is False
-    assert "brand.context.required" in {
-        finding["code"] for finding in report.json()["findings"]
-    }
+    assert "brand.context.required" in {finding["code"] for finding in report.json()["findings"]}
     assert stale.status_code == 409
     assert stale.json() == {"detail": "Draft revision conflict."}
 

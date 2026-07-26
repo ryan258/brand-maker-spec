@@ -24,9 +24,7 @@ def _safe_name(name: str) -> bool:
     return not path.is_absolute() and ".." not in path.parts and "\\" not in name
 
 
-def create_workspace_backup(
-    draft: WorkingDraft, assets: AssetStore, destination: Path
-) -> None:
+def create_workspace_backup(draft: WorkingDraft, assets: AssetStore, destination: Path) -> None:
     """Write a deterministic portable snapshot after revalidating every asset."""
 
     portable_assets = []
@@ -58,9 +56,7 @@ def create_workspace_backup(
         "brand_id": str(draft.brand_id),
         "members": {name: hashlib.sha256(value).hexdigest() for name, value in members.items()},
     }
-    members["manifest.json"] = json.dumps(
-        manifest, sort_keys=True, separators=(",", ":")
-    ).encode()
+    members["manifest.json"] = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     with ZipFile(destination, "w", compression=ZIP_DEFLATED) as archive:
         for name in sorted(members):
             info = ZipInfo(name)

@@ -113,9 +113,7 @@ def test_saved_brand_summary_and_page_contracts() -> None:
         }
     )
     summary = BrandSummary.from_saved(saved)
-    page = SavedBrandPage(
-        items=[summary], page=1, page_size=12, total_items=1, total_pages=1
-    )
+    page = SavedBrandPage(items=[summary], page=1, page_size=12, total_items=1, total_pages=1)
 
     assert summary.brand_name == "Floogle"
     assert summary.color_palette.primary == "#4285F4"

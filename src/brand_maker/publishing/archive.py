@@ -150,9 +150,7 @@ def restore_archive(source: Path, asset_root: Path) -> ArchiveContents:
     return contents
 
 
-def import_archive(
-    source: Path, *, asset_root: Path, database_path: Path
-) -> ArchiveContents:
+def import_archive(source: Path, *, asset_root: Path, database_path: Path) -> ArchiveContents:
     contents = restore_archive(source, asset_root)
     published = contents.published
     with sqlite3.connect(database_path, timeout=5.0) as connection:
@@ -178,9 +176,7 @@ def import_archive(
                     published.change_summary,
                     published.content_hash,
                     published.manifest.model_dump_json(),
-                    json.dumps(
-                        [item.model_dump(mode="json") for item in published.approvals]
-                    ),
+                    json.dumps([item.model_dump(mode="json") for item in published.approvals]),
                     published.snapshot.model_dump_json(),
                 ),
             )

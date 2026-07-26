@@ -58,9 +58,7 @@ class FakeCompleter:
 
 
 def successful_response() -> BrandResponse:
-    return BrandResponse.model_validate(
-        {"status": "ok", "kit": valid_kit_data(), "message": None}
-    )
+    return BrandResponse.model_validate({"status": "ok", "kit": valid_kit_data(), "message": None})
 
 
 def test_deterministic_validation_accepts_complete_ok_response() -> None:

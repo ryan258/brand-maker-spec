@@ -3,7 +3,7 @@
 # JavaScript is kept dependency-free and uses text-only DOM APIs for model output.
 # ruff: noqa: E501
 
-UI_SCRIPT = r'''"use strict";
+UI_SCRIPT = r""""use strict";
 
 const form = document.getElementById("brand-form");
 const input = document.getElementById("brand-name");
@@ -196,4 +196,4 @@ copyButton.addEventListener("click", async () => {
 });
 
 updateCount();
-'''
+"""

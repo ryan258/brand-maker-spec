@@ -322,4 +322,3 @@ def test_early_archive_limit_check() -> None:
             kit_res = api.get(f"/api/brand-systems/{brand_id}/draft-exports/kit")
             assert kit_res.status_code == 413
             assert "250 MB" in kit_res.json()["detail"]
-

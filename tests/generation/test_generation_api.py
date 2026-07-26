@@ -93,9 +93,7 @@ class SectionCompleter:
                             "dont_guidance": ["Do not invent an unsupported variant."],
                             "references": [],
                         }
-                        for kind in request["content_requirements"][
-                            "required_pattern_kinds"
-                        ]
+                        for kind in request["content_requirements"]["required_pattern_kinds"]
                     ],
                 },
             }

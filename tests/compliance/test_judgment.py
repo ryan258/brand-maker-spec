@@ -39,8 +39,6 @@ def test_scoped_evidence_is_persisted_without_upgrading_model_judgment(
         claim="The approved campaign uses the intended voice.",
         verifier_name="Ryan",
     )
-    registered = repository.register(
-        UUID("d795ebf9-8f54-44a2-85cd-e73faacb7008"), evidence
-    )
+    registered = repository.register(UUID("d795ebf9-8f54-44a2-85cd-e73faacb7008"), evidence)
 
     assert repository.get(registered.id) == registered

@@ -113,9 +113,7 @@ def test_app_fails_during_startup_without_api_key(
 
 def test_brand_endpoint_returns_pipeline_response() -> None:
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
-    pipeline = FakePipeline(
-        BrandResponse(status="error", message="Model provider unavailable.")
-    )
+    pipeline = FakePipeline(BrandResponse(status="error", message="Model provider unavailable."))
 
     with TestClient(create_app(settings=settings, pipeline=pipeline)) as client:
         response = client.post("/brand", json={"brand_name": "Floogle"})
@@ -134,9 +132,7 @@ def test_brand_endpoint_rejects_invalid_input_without_calling_pipeline(
     payload: dict[str, str],
 ) -> None:
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
-    pipeline = FakePipeline(
-        BrandResponse(status="error", message="should never be returned")
-    )
+    pipeline = FakePipeline(BrandResponse(status="error", message="should never be returned"))
 
     with TestClient(create_app(settings=settings, pipeline=pipeline)) as client:
         response = client.post("/brand", json=payload)

@@ -64,13 +64,7 @@ class JudgeScores(ContractModel):
     @model_validator(mode="after")
     def validate_average(self) -> Self:
         expected = round(
-            (
-                self.parody_clarity
-                + self.voice_consistency
-                + self.color_fit
-                + self.usability
-            )
-            / 4,
+            (self.parody_clarity + self.voice_consistency + self.color_fit + self.usability) / 4,
             1,
         )
         if self.overall != expected:

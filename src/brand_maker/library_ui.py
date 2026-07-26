@@ -3,7 +3,7 @@
 # JavaScript output rendering uses text-only DOM APIs by design.
 # ruff: noqa: E501
 
-LIBRARY_SCRIPT = r'''"use strict";
+LIBRARY_SCRIPT = r""""use strict";
 
 const pageType = document.body.dataset.page;
 const safeHex = /^#[0-9a-fA-F]{6}$/;
@@ -212,4 +212,4 @@ async function loadDetail() {
 
 if (pageType === "library") loadLibrary();
 if (pageType === "detail") loadDetail();
-'''
+"""

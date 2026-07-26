@@ -42,9 +42,7 @@ def published_version() -> PublishedVersion:
                         kind="say_never_say",
                         summary="Turn the voice into concrete language choices.",
                         specifications=[
-                            PatternSpecification(
-                                label="Say", value="Lead with the reader benefit."
-                            )
+                            PatternSpecification(label="Say", value="Lead with the reader benefit.")
                         ],
                         do_guidance=["Use specific, verifiable language."],
                         dont_guidance=["Use unsupported superlatives."],

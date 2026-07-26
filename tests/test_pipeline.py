@@ -34,9 +34,7 @@ class ScriptedGenerator:
         self.outcomes = list(outcomes)
         self.calls: list[tuple[str, str, bool]] = []
 
-    async def generate(
-        self, *, brand_name: str, model: str, safety_rephrase: bool = False
-    ) -> str:
+    async def generate(self, *, brand_name: str, model: str, safety_rephrase: bool = False) -> str:
         self.calls.append((brand_name, model, safety_rephrase))
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
@@ -98,9 +96,7 @@ async def test_build_rephrases_once_after_plain_text_refusal() -> None:
 
 @pytest.mark.asyncio
 async def test_build_rephrases_refusal_language_wrapped_in_json() -> None:
-    generator = ScriptedGenerator(
-        ['{"message":"I cannot build this brand."}', VALID_KIT]
-    )
+    generator = ScriptedGenerator(['{"message":"I cannot build this brand."}', VALID_KIT])
 
     response = await pipeline(generator).build("Floogle")
 

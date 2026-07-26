@@ -207,6 +207,27 @@ class SQLiteBrandSystemRepository:
             ).fetchone()
         return WorkingDraft.model_validate_json(row[0]) if row is not None else None
 
+    def references_asset_hash(self, content_hash: str) -> bool:
+        """Return whether current or reversible workspace history references an asset blob."""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT draft_json FROM brand_system_workspaces
+                UNION ALL
+                SELECT before_json FROM brand_system_audit_events WHERE before_json IS NOT NULL
+                UNION ALL
+                SELECT after_json FROM brand_system_audit_events
+                """
+            ).fetchall()
+        for (payload_json,) in rows:
+            payload = json.loads(payload_json)
+            if any(
+                asset.get("content_hash") == content_hash for asset in payload.get("assets", [])
+            ):
+                return True
+        return False
+
     def get_including_trash(self, brand_id: UUID) -> WorkingDraft | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -368,9 +389,7 @@ class SQLiteBrandSystemRepository:
 
         return self._move_history(brand_id, expected_revision=expected_revision, redo=True)
 
-    def _move_history(
-        self, brand_id: UUID, *, expected_revision: int, redo: bool
-    ) -> WorkingDraft:
+    def _move_history(self, brand_id: UUID, *, expected_revision: int, redo: bool) -> WorkingDraft:
         if expected_revision < 1:
             raise ValueError("expected revision must be positive")
         now = self._clock().isoformat()
@@ -532,9 +551,7 @@ class SQLiteBrandSystemRepository:
             reason=reason,
         )
 
-    def restore_from_trash(
-        self, brand_id: UUID, *, expected_revision: int
-    ) -> WorkingDraft:
+    def restore_from_trash(self, brand_id: UUID, *, expected_revision: int) -> WorkingDraft:
         """Restore one trashed workspace after an optimistic revision check."""
 
         now = self._clock().isoformat()
@@ -642,9 +659,7 @@ class SQLiteBrandSystemRepository:
             )
         return restored
 
-    def list_trash(
-        self, *, page: int, page_size: int
-    ) -> tuple[list[TrashRecord], int]:
+    def list_trash(self, *, page: int, page_size: int) -> tuple[list[TrashRecord], int]:
         if page < 1 or not 1 <= page_size <= 100:
             raise ValueError("page must be positive and page_size must be between 1 and 100")
         offset = (page - 1) * page_size

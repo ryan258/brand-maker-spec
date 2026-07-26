@@ -44,9 +44,10 @@ def test_archive_import_repopulates_a_fresh_publication_database(tmp_path: Path)
     )
 
     assert imported.published == published
-    assert SQLitePublicationRepository(database).get(
-        published.brand_id, published.version
-    ) == published
+    assert (
+        SQLitePublicationRepository(database).get(published.brand_id, published.version)
+        == published
+    )
 
 
 def test_archive_import_api_restores_publication_for_normal_routes(tmp_path: Path) -> None:
@@ -65,9 +66,7 @@ def test_archive_import_api_restores_publication_for_normal_routes(tmp_path: Pat
             content=archive.read_bytes(),
             headers={"Content-Type": "application/zip"},
         )
-        fetched = api.get(
-            f"/api/brand-systems/{published.brand_id}/versions/{published.version}"
-        )
+        fetched = api.get(f"/api/brand-systems/{published.brand_id}/versions/{published.version}")
 
     assert imported.status_code == 201
     assert fetched.status_code == 200

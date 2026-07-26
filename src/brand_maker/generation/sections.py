@@ -155,7 +155,6 @@ class GeneratedSectionEnvelope(ContractModel):
         missing_patterns = sorted(required_patterns - present_patterns)
         if missing_patterns:
             raise ValueError(
-                "generated section missing required brand patterns: "
-                + ", ".join(missing_patterns)
+                "generated section missing required brand patterns: " + ", ".join(missing_patterns)
             )
         return self

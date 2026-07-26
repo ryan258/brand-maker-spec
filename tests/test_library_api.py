@@ -43,13 +43,9 @@ def test_create_brand_saves_success_and_exposes_full_detail(tmp_path: Path) -> N
     pipeline = FakePipeline(BrandResponse(status="ok", kit=brand_kit()))
     path = tmp_path / "brands.db"
     store = SQLiteBrandRepository(path)
-    settings = Settings(
-        _env_file=None, openrouter_api_key="test-key", database_path=path
-    )
+    settings = Settings(_env_file=None, openrouter_api_key="test-key", database_path=path)
 
-    with TestClient(
-        create_app(settings=settings, pipeline=pipeline, repository=store)
-    ) as client:
+    with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
         created = client.post("/api/brands", json={"brand_name": "Floogle"})
         brand_id = created.json()["id"]
         workspace_id = created.json()["workspace_id"]
@@ -99,15 +95,11 @@ def test_trashed_quick_start_cannot_be_duplicated_from_its_saved_kit(tmp_path: P
 
 
 def test_create_brand_does_not_save_terminal_failure(tmp_path: Path) -> None:
-    pipeline = FakePipeline(
-        BrandResponse(status="error", message="Model provider unavailable.")
-    )
+    pipeline = FakePipeline(BrandResponse(status="error", message="Model provider unavailable."))
     store = SQLiteBrandRepository(tmp_path / "brands.db")
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
 
-    with TestClient(
-        create_app(settings=settings, pipeline=pipeline, repository=store)
-    ) as client:
+    with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
         created = client.post("/api/brands", json={"brand_name": "Floogle"})
         listing = client.get("/api/brands")
 
@@ -124,19 +116,17 @@ def test_create_brand_does_not_save_terminal_failure(tmp_path: Path) -> None:
 
 def test_brand_list_is_paginated_newest_first(tmp_path: Path) -> None:
     path = tmp_path / "brands.db"
-    first = SQLiteBrandRepository(
-        path, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC)
-    ).save(brand_kit("First"))
-    second = SQLiteBrandRepository(
-        path, clock=lambda: datetime(2026, 7, 23, tzinfo=UTC)
-    ).save(brand_kit("Second"))
+    first = SQLiteBrandRepository(path, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC)).save(
+        brand_kit("First")
+    )
+    second = SQLiteBrandRepository(path, clock=lambda: datetime(2026, 7, 23, tzinfo=UTC)).save(
+        brand_kit("Second")
+    )
     store = SQLiteBrandRepository(path)
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
     pipeline = FakePipeline(BrandResponse(status="error", message="unused"))
 
-    with TestClient(
-        create_app(settings=settings, pipeline=pipeline, repository=store)
-    ) as client:
+    with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
         response = client.get("/api/brands?page=1&pageSize=1")
 
     assert response.status_code == 200
@@ -152,13 +142,9 @@ def test_brand_library_validates_pagination_and_unknown_ids(tmp_path: Path) -> N
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
     pipeline = FakePipeline(BrandResponse(status="error", message="unused"))
 
-    with TestClient(
-        create_app(settings=settings, pipeline=pipeline, repository=store)
-    ) as client:
+    with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
         invalid_page = client.get("/api/brands?page=0&pageSize=101")
-        oversized_page = client.get(
-            "/api/brands?page=999999999999999999999999999999&pageSize=12"
-        )
+        oversized_page = client.get("/api/brands?page=999999999999999999999999999999&pageSize=12")
         missing = client.get("/api/brands/7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4")
 
     assert invalid_page.status_code == 422

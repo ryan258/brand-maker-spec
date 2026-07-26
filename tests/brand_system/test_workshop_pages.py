@@ -84,15 +84,15 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'get("sourceBrandId")' in script.text
     assert "source_brand_id:sourceBrandId||null" in script.text
     assert 'entry_path:sourceBrandId?"quick_start"' in script.text
-    assert 'document.querySelector(\'input[name="assistance-mode"]:checked\')' in script.text
+    assert "document.querySelector('input[name=\"assistance-mode\"]:checked')" in script.text
     assert "textContent" in script.text
     assert "innerHTML" not in script.text
     assert "eval(" not in script.text
     assert 'createDerivatives("favicon-sets"' in script.text
     assert 'createDerivatives("logo-variant-sets"' in script.text
     assert 'createDerivatives("vectorizations"' in script.text
-    assert '/brief`' in script.text
-    assert '/evidence`' in script.text
+    assert "/brief`" in script.text
+    assert "/evidence`" in script.text
     assert styles.status_code == 200
     assert "@media (max-width: 48rem)" in styles.text
     assert "prefers-reduced-motion" in styles.text

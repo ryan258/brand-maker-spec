@@ -77,9 +77,7 @@ class SQLiteBrandRepository:
     def list(self, *, page: int, page_size: int) -> tuple[list[BrandSummary], int]:
         offset = (page - 1) * page_size
         with self._connect() as connection:
-            total = int(
-                connection.execute("SELECT COUNT(*) FROM saved_brands").fetchone()[0]
-            )
+            total = int(connection.execute("SELECT COUNT(*) FROM saved_brands").fetchone()[0])
             rows = connection.execute(
                 """
                 SELECT id, created_at, kit_json

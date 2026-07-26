@@ -33,9 +33,7 @@ def export_markdown(draft: WorkingDraft, *, version: str, amendment_revision: in
                     "",
                 ]
             )
-            lines.extend(
-                f"- **{item.label}:** {item.value}" for item in pattern.specifications
-            )
+            lines.extend(f"- **{item.label}:** {item.value}" for item in pattern.specifications)
             lines.extend(["", "**Do**", ""])
             lines.extend(f"- {item}" for item in pattern.do_guidance)
             lines.extend(["", "**Do not**", ""])

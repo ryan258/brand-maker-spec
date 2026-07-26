@@ -47,9 +47,7 @@ def test_compliance_page_and_deterministic_api_are_accessible_and_labeled(
                 "expires_at": "2027-07-23T12:00:00Z",
             },
         )
-        fetched_exception = api.get(
-            f"/api/compliance/exceptions/{exception.json()['id']}"
-        )
+        fetched_exception = api.get(f"/api/compliance/exceptions/{exception.json()['id']}")
         untrusted_markup = api.post(
             "/api/compliance/artifact-evaluations",
             json={

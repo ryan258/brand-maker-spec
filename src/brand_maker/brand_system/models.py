@@ -21,9 +21,7 @@ StableId = Annotated[
 ShortText = Annotated[str, Field(min_length=1, max_length=300)]
 NarrativeText = Annotated[str, Field(min_length=1, max_length=50_000)]
 
-ReferenceKind = Literal[
-    "section", "block", "rule", "token", "asset", "example", "pattern"
-]
+ReferenceKind = Literal["section", "block", "rule", "token", "asset", "example", "pattern"]
 EntryPath = Literal["raw_idea", "named_concept", "existing_project", "quick_start"]
 AssistanceMode = Literal["advisor", "copilot", "autonomous"]
 ResearchMode = Literal["local_only", "controlled"]

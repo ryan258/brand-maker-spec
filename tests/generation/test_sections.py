@@ -68,9 +68,7 @@ def envelope(section_id: str = "section.strategy") -> dict[str, object]:
                     "name": str(kind).replace("_", " ").title(),
                     "kind": kind,
                     "summary": "A concrete application pattern for this brand.",
-                    "specifications": [
-                        {"label": "Default", "value": "Apply this specification."}
-                    ],
+                    "specifications": [{"label": "Default", "value": "Apply this specification."}],
                     "do_guidance": ["Use the documented pattern consistently."],
                     "dont_guidance": ["Do not invent an unapproved alternative."],
                     "references": [],

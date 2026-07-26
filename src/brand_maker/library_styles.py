@@ -3,7 +3,7 @@
 # Static CSS intentionally groups related declarations on compact lines.
 # ruff: noqa: E501
 
-LIBRARY_CSS = r''':root {
+LIBRARY_CSS = r""":root {
   color-scheme: light dark;
   --paper: #f4f0e7;
   --surface: #fffdf7;
@@ -110,4 +110,4 @@ footer p { margin: 0; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
-'''
+"""
