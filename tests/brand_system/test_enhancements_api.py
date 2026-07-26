@@ -21,6 +21,7 @@ from brand_maker.brand_system.models import (
 )
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository, StaleDraftRevision
 from brand_maker.config import Settings
+from brand_maker.generation.prompts import PROMPT_VERSION
 from brand_maker.generation.repository import SQLiteGenerationRepository
 from brand_maker.storage import SQLiteBrandRepository
 
@@ -31,7 +32,7 @@ class DummyCompleter:
     ) -> str:
         import json
         return json.dumps({
-            "prompt_version": "living-brand-section-v2",
+            "prompt_version": PROMPT_VERSION,
             "section_id": "section.strategy",
             "rationale": "Generated valid variant.",
             "section": {

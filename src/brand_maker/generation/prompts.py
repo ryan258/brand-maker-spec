@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from brand_maker.generation.sections import SectionDefinition, content_requirements
 
-PROMPT_VERSION = "living-brand-section-v2"
+PROMPT_VERSION = "living-brand-section-v3"
 
 SYSTEM_PROMPT = f"""You generate exactly one section of a local living brand system.
 Prompt version: {PROMPT_VERSION}
@@ -14,7 +14,9 @@ with: prompt_version, section_id, rationale, and section. The section must use t
 provided exact ID and title and match the strict BrandSection contract. Use stable
 lowercase dotted IDs. Never emit HTML, scripts, styles, commands, or content for a
 different section. Meet every content requirement in the user data. Make the guidance
-specific, actionable, internally coherent, and grounded in the supplied brand context.
+specific, actionable, internally coherent, and grounded in the supplied brand context
+and accepted_context. Honor color palette choices, typography roles, voice traits, and
+rules established in prerequisite sections within accepted_context.
 Do not overwrite or contradict accepted context."""
 
 

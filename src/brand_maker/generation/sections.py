@@ -120,6 +120,34 @@ REQUIRED_PATTERN_KINDS: dict[str, tuple[PatternKind, ...]] = {
     "section.governance": ("governance_workflow",),
 }
 
+# content_requirements() indexes REQUIRED_PATTERN_KINDS, and the orchestrator builds the
+# prompt outside its retry handler — a missing entry would escape as an uncaught KeyError
+# mid-run instead of failing the section. Catch the mismatch at import instead.
+assert SECTION_CATALOG.keys() == REQUIRED_PATTERN_KINDS.keys(), (
+    "every catalog section needs required pattern kinds: "
+    f"{sorted(SECTION_CATALOG.keys() ^ REQUIRED_PATTERN_KINDS.keys())}"
+)
+
+
+def prerequisite_closure(section_id: str) -> set[str]:
+    """Every section this one transitively depends on, excluding itself.
+
+    Direct prerequisites are not enough: section.digital depends only on section.layout,
+    but layout depends on color and typography, and digital cannot honor the palette or
+    type roles it never sees.
+    """
+
+    closure: set[str] = set()
+    pending = list(SECTION_CATALOG[section_id].prerequisites)
+    while pending:
+        current = pending.pop()
+        if current in closure:
+            continue
+        closure.add(current)
+        pending.extend(SECTION_CATALOG[current].prerequisites)
+    closure.discard(section_id)
+    return closure
+
 
 def content_requirements(section_id: str) -> dict[str, object]:
     """Return the minimum substantive content contract for generated guidance."""

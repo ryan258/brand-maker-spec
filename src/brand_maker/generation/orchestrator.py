@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
@@ -23,7 +23,11 @@ from brand_maker.generation.repository import (
     SectionRunState,
     SQLiteGenerationRepository,
 )
-from brand_maker.generation.sections import SECTION_CATALOG, GeneratedSectionEnvelope
+from brand_maker.generation.sections import (
+    SECTION_CATALOG,
+    GeneratedSectionEnvelope,
+    prerequisite_closure,
+)
 from brand_maker.json_extract import NoJSONObject, extract_json_object
 from brand_maker.openrouter import ModelUnavailable, ProviderError
 
@@ -102,6 +106,69 @@ def _record_generated_decision(
         }
     )
     return section, evidence, decision
+
+
+# Prompt budget per section: the context carries every prerequisite, and blocks hold up to
+# 50k characters each, so an edited draft would otherwise blow the model's context window.
+_MAX_CONTEXT_ITEMS = 20
+_MAX_CONTEXT_CHARS = 1_000
+
+
+def _clip(text: str) -> str:
+    """Bound one field, marking the cut so the model does not read it as complete."""
+    return text if len(text) <= _MAX_CONTEXT_CHARS else text[:_MAX_CONTEXT_CHARS] + "…"
+
+
+def _build_accepted_context(
+    sections: list[BrandSection], *, prerequisites: Collection[str] | None = None
+) -> dict[str, object]:
+    """Hydrate prerequisite section context with blocks, tokens, rules, examples, and patterns."""
+    context: dict[str, object] = {}
+    for section in sections:
+        if prerequisites is not None and section.id not in prerequisites:
+            continue
+        if not (
+            section.blocks
+            or section.rules
+            or section.tokens
+            or section.examples
+            or section.patterns
+        ):
+            context[section.id] = {"status": section.status}
+            continue
+        data: dict[str, object] = {"status": section.status, "title": section.title}
+        if section.blocks:
+            data["blocks"] = [
+                {"id": b.id, "type": b.type, "text": _clip(b.text)}
+                for b in section.blocks[:_MAX_CONTEXT_ITEMS]
+            ]
+        if section.tokens:
+            data["tokens"] = [
+                {"id": t.id, "name": t.name, "value_type": t.value_type, "value": t.value}
+                for t in section.tokens[:_MAX_CONTEXT_ITEMS]
+            ]
+        if section.rules:
+            data["rules"] = [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "description": _clip(r.description),
+                    "enforcement": r.enforcement,
+                }
+                for r in section.rules[:_MAX_CONTEXT_ITEMS]
+            ]
+        if section.examples:
+            data["examples"] = [
+                {"id": e.id, "kind": e.kind, "text": _clip(e.text)}
+                for e in section.examples[:_MAX_CONTEXT_ITEMS]
+            ]
+        if section.patterns:
+            data["patterns"] = [
+                {"id": p.id, "name": p.name, "kind": p.kind, "summary": _clip(p.summary)}
+                for p in section.patterns[:_MAX_CONTEXT_ITEMS]
+            ]
+        context[section.id] = data
+    return context
 
 
 def _founding_brief(draft: WorkingDraft) -> dict[str, object] | None:
@@ -208,11 +275,9 @@ class GenerationOrchestrator:
         if target_section_id is None:
             requested = list(SECTION_CATALOG)
         else:
-            try:
-                definition = SECTION_CATALOG[target_section_id]
-            except KeyError as exc:
-                raise ValueError("unknown generation section") from exc
-            needed = set(definition.prerequisites) | {target_section_id}
+            if target_section_id not in SECTION_CATALOG:
+                raise ValueError("unknown generation section")
+            needed = prerequisite_closure(target_section_id) | {target_section_id}
             requested = [section_id for section_id in SECTION_CATALOG if section_id in needed]
         now = self._clock()
         return self._save_and_notify(
@@ -272,19 +337,20 @@ class GenerationOrchestrator:
             accepted = False
             last_error = "Section generation failed validation."
             selected_model = run.model
+            messages = section_messages(
+                definition=definition,
+                brand_name=draft.brand_name,
+                brand_context=draft.brand_context,
+                founding_brief=_founding_brief(draft),
+                accepted_context=_build_accepted_context(
+                    draft.sections, prerequisites=prerequisite_closure(state.section_id)
+                ),
+            )
             for _ in range(3):
                 state = state.model_copy(update={"attempts": state.attempts + 1})
                 try:
                     raw = await completer.complete(
-                        messages=section_messages(
-                            definition=definition,
-                            brand_name=draft.brand_name,
-                            brand_context=draft.brand_context,
-                            founding_brief=_founding_brief(draft),
-                            accepted_context={
-                                section.id: section.status for section in draft.sections
-                            },
-                        ),
+                        messages=messages,
                         model=selected_model,
                         temperature=0.5,
                         max_tokens=2_500,
