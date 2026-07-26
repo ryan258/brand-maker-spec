@@ -169,3 +169,84 @@ def _simplify_loop(points: list[Point]) -> list[Point]:
 def _loop_path(points: list[Point]) -> str:
     start, *rest = points
     return f"M{start[0]} {start[1]} " + " ".join(f"L{x} {y}" for x, y in rest) + " Z"
+
+
+def extract_dominant_logo_color(content: bytes, media_type: str) -> str:
+    """Extract dominant foreground RGB hex color from a raster logo image."""
+    image = _decode_raster(content, media_type)
+    alpha = image.getchannel("A")
+    rgb = image.convert("RGB")
+    quantized = rgb.quantize(colors=16).convert("RGB")
+    background: tuple[int, int, int] | None = None
+    if alpha.getextrema() == (255, 255):
+        corners = [
+            cast(tuple[int, int, int], rgb.getpixel(point))
+            for point in (
+                (0, 0),
+                (image.width - 1, 0),
+                (0, image.height - 1),
+                (image.width - 1, image.height - 1),
+            )
+        ]
+        background = max(corners, key=corners.count)
+
+    def count_colors(*, exclude_background: bool) -> dict[tuple[int, int, int], int]:
+        counts: dict[tuple[int, int, int], int] = {}
+        for y in range(image.height):
+            for x in range(image.width):
+                if cast(int, alpha.getpixel((x, y))) <= 64:
+                    continue
+                raw_color = cast(tuple[int, int, int], rgb.getpixel((x, y)))
+                if (
+                    exclude_background
+                    and background is not None
+                    and max(abs(raw_color[index] - background[index]) for index in range(3)) <= 12
+                ):
+                    continue
+                color = cast(tuple[int, int, int], quantized.getpixel((x, y)))
+                counts[color] = counts.get(color, 0) + 1
+        return counts
+
+    counts = count_colors(exclude_background=background is not None)
+    if not counts and background is not None:
+        counts = count_colors(exclude_background=False)
+    if not counts:
+        return "#000000"
+    dominant = max(counts, key=counts.get)  # type: ignore[arg-type]
+    return f"#{dominant[0]:02x}{dominant[1]:02x}{dominant[2]:02x}"
+
+
+def check_logo_contrast_against_backgrounds(
+    content: bytes, media_type: str, background_tokens: list[tuple[str, str]]
+) -> list[dict[str, object]]:
+    """Check extracted logo color contrast against list of background token (name, hex) pairs."""
+    from brand_maker.compliance.deterministic import _contrast
+
+    logo_hex = extract_dominant_logo_color(content, media_type)
+    results = []
+    for token_name, bg_hex in background_tokens:
+        if bg_hex.startswith("#") and len(bg_hex) == 7:
+            ratio = round(_contrast(logo_hex, bg_hex), 2)
+            passes = ratio >= 3.0  # WCAG UI element threshold
+            if passes:
+                msg = (
+                    f"Logo color ({logo_hex}) has adequate contrast "
+                    f"({ratio}:1) against '{token_name}' ({bg_hex})."
+                )
+            else:
+                msg = (
+                    f"Logo color ({logo_hex}) has low contrast "
+                    f"({ratio}:1) against '{token_name}' ({bg_hex}). "
+                    f"Consider a light/dark logo variant."
+                )
+            results.append(
+                {
+                    "background_token": token_name,
+                    "background_color": bg_hex,
+                    "logo_color": logo_hex,
+                    "contrast_ratio": ratio,
+                    "passes": passes,
+                    "message": msg,
+                }
+            )
+    return results
