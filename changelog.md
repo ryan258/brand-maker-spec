@@ -79,6 +79,10 @@
   keys, so an otherwise-correct section is no longer rejected for an echoed field.
 - Surfaced the real per-attempt validation error on a failed generation section instead
   of a generic message, and logged it, so generation failures are diagnosable.
+- Excluded target section's own pre-brief/stale content from `accepted_context` during section generation and brief-matching reruns, avoiding self-contradictory prompt instructions.
+- Expanded `accepted_context` filtering to transitive prerequisite closures (`prerequisite_closure`), ensuring downstream sections receive necessary color palette, typography, and layout rules.
+- Hydrated pattern metadata in `accepted_context`, capped narrative prose/rules/examples/patterns text length to 1,000 characters, and capped item array bounds to keep prompt context size bounded.
+- Bumped section generation prompt version to `living-brand-section-v3` and optimized section generation by hoisting prompt construction outside completion retry loops.
 
 ### Changed
 
