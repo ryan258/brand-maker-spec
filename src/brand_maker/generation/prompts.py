@@ -33,6 +33,47 @@ def section_messages(
         "section_title": definition.title,
         "section_purpose": definition.purpose,
         "content_requirements": content_requirements(definition.id),
+        "shape_rules": [
+            "Every object must use EXACTLY the keys shown in its contract below. "
+            "Do not rename keys, do not add keys (no 'type' on tokens, no 'note', "
+            "no 'purpose', no 'summary' on examples).",
+            "Tokens use 'value_type' (not 'type') and always include an 'id'.",
+            "A block with type 'heading' must include heading_level (2-4); "
+            "other block types must omit heading_level. Prefer 'paragraph' blocks.",
+            "Produce exactly the required counts; do not append extra, half-filled items.",
+        ],
+        "section_contract": {
+            "id": "the exact section_id provided above",
+            "title": "the exact section_title provided above",
+            "status": "draft",
+            "blocks": "array of block_contract objects (>= minimum_narrative_blocks)",
+            "rules": "array of rule_contract objects (>= minimum_rules)",
+            "examples": "array of example_contract objects (>= minimum_examples)",
+            "patterns": "array of pattern_contract objects covering required_pattern_kinds",
+            "tokens": "array of token_contract objects when tokens_required, else []",
+        },
+        "block_contract": {
+            "id": "stable lowercase dotted ID",
+            "type": "paragraph",
+            "text": "the block's prose content",
+        },
+        "rule_contract": {
+            "id": "stable lowercase dotted ID",
+            "name": "display name",
+            "description": "what the rule requires",
+            "enforcement": "one of: advisory, warning, blocking",
+        },
+        "example_contract": {
+            "id": "stable lowercase dotted ID",
+            "kind": "one of: do, dont, context",
+            "text": "the worked example content",
+        },
+        "token_contract": {
+            "id": "stable lowercase dotted ID such as token.color.primary",
+            "name": "display name",
+            "value_type": "one of: color, string, number, dimension, duration, font, boolean",
+            "value": "the token value such as #1b4d3e for a color",
+        },
         "pattern_contract": {
             "id": "stable lowercase dotted ID",
             "name": "display name",

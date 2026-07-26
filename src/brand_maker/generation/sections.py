@@ -133,11 +133,51 @@ def content_requirements(section_id: str) -> dict[str, object]:
     }
 
 
+# Keys placed in the generation prompt that models tend to echo back into their output.
+# extra="forbid" then rejects an otherwise-correct section on every retry. We strip only
+# these known scaffolding echoes (at envelope root and in the section); genuine injected
+# keys still fail validation.
+_SCAFFOLD_ECHOES = frozenset(
+    {
+        "purpose",
+        "section_purpose",
+        "section_title",
+        "brand_name",
+        "brand_context",
+        "content_requirements",
+        "shape_rules",
+        "section_contract",
+        "block_contract",
+        "rule_contract",
+        "example_contract",
+        "token_contract",
+        "pattern_contract",
+        "prerequisites",
+        "accepted_context",
+    }
+)
+
+
 class GeneratedSectionEnvelope(ContractModel):
     prompt_version: str
     section_id: StableId
     rationale: NarrativeText
     section: BrandSection
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_echoed_scaffolding(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        # Envelope root: never touch real envelope fields (e.g. section_id).
+        for key in _SCAFFOLD_ECHOES - set(cls.model_fields):
+            data.pop(key, None)
+        # Section object: never touch real BrandSection fields.
+        section = data.get("section")
+        if isinstance(section, dict):
+            for key in _SCAFFOLD_ECHOES - set(BrandSection.model_fields):
+                section.pop(key, None)
+        return data
 
     @model_validator(mode="after")
     def bind_section_identity(self) -> Self:

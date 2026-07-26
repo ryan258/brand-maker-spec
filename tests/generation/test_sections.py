@@ -161,6 +161,93 @@ def test_section_prompt_frames_owner_content_as_json_data() -> None:
     }
 
 
+def test_section_prompt_shows_the_section_container_contract() -> None:
+    # extra="forbid": if the prompt does not name the section's own keys, models invent
+    # them (content_blocks, purpose, ...) and every generation attempt fails validation.
+    from brand_maker.brand_system.models import BrandSection
+
+    messages = section_messages(
+        definition=SECTION_CATALOG["section.strategy"],
+        brand_name="Acme",
+        accepted_context={},
+    )
+    prompt_blob = messages[0]["content"] + messages[1]["content"]
+
+    for key in BrandSection.model_fields:
+        if key not in ("locked", "tokens"):  # locked is optional; tokens are conditional
+            assert key in prompt_blob, f"section key '{key}' not shown to the model"
+
+
+def test_section_prompt_shows_every_generated_member_contract() -> None:
+    # The prompt must name every required field of each member type, or the model guesses.
+    # Tokens are the sneaky one: value_type (not type) + id, on the first token-bearing section.
+    from brand_maker.brand_system.models import (
+        BrandExample,
+        BrandRule,
+        BrandToken,
+        NarrativeBlock,
+    )
+
+    messages = section_messages(
+        definition=SECTION_CATALOG["section.color"],  # a token-bearing section
+        brand_name="Acme",
+        accepted_context={},
+    )
+    prompt_blob = messages[0]["content"] + messages[1]["content"]
+
+    for model in (NarrativeBlock, BrandRule, BrandExample, BrandToken):
+        for name, field in model.model_fields.items():
+            if field.is_required() and name not in ("references", "decision_ids"):
+                assert name in prompt_blob, f"{model.__name__}.{name} not shown to the model"
+    # The non-obvious ones the models kept guessing wrong.
+    assert "do, dont, context" in prompt_blob
+    assert "value_type" in prompt_blob
+
+
+def test_section_prompt_contracts_only_show_real_keys() -> None:
+    # Hint keys inside contract objects (note/purpose) get echoed verbatim into output and
+    # fail extra="forbid". Contracts must list only keys the models actually accept.
+    from brand_maker.brand_system.models import BrandToken
+
+    messages = section_messages(
+        definition=SECTION_CATALOG["section.color"],
+        brand_name="Acme",
+        accepted_context={},
+    )
+    payload = json.loads(messages[1]["content"])
+    assert set(payload["token_contract"]) <= set(BrandToken.model_fields)
+
+
+def test_envelope_strips_echoed_scaffolding_keys() -> None:
+    # Models echo prompt scaffolding (purpose, ...) into the section; without stripping,
+    # extra="forbid" rejects a section that is otherwise complete and correct.
+    payload = envelope()
+    payload["section"]["purpose"] = "Define purpose, audience, and promise."  # type: ignore[index]
+
+    validated = GeneratedSectionEnvelope.model_validate(payload)
+    assert not hasattr(validated.section, "purpose")
+
+
+def test_envelope_strips_scaffolding_echoed_at_the_root() -> None:
+    # Models also echo prompt keys (section_title, ...) into the envelope root, not just
+    # the section. Stripping must cover both levels or a complete draft stalls mid-run.
+    payload = envelope()
+    payload["section_title"] = "Strategy"  # echoed prompt key at the root
+    payload["section"]["section_title"] = "Strategy"  # and inside the section
+
+    validated = GeneratedSectionEnvelope.model_validate(payload)
+    assert validated.section_id == "section.strategy"
+
+
+def test_envelope_still_rejects_genuine_injected_keys() -> None:
+    # Stripping must not weaken the injection guard: unknown non-scaffolding keys still fail.
+    payload = envelope()
+    payload["section"]["model_command"] = "overwrite another section"  # type: ignore[index]
+
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        GeneratedSectionEnvelope.model_validate(payload)
+
+
 def test_generated_section_rejects_shallow_brand_guidance() -> None:
     payload = envelope()
     payload["section"]["blocks"] = []  # type: ignore[index]

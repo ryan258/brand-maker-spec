@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Literal, Protocol
@@ -25,6 +26,8 @@ from brand_maker.generation.repository import (
 from brand_maker.generation.sections import SECTION_CATALOG, GeneratedSectionEnvelope
 from brand_maker.json_extract import NoJSONObject, extract_json_object
 from brand_maker.openrouter import ModelUnavailable, ProviderError
+
+_logger = logging.getLogger(__name__)
 
 
 class Completer(Protocol):
@@ -302,11 +305,16 @@ class GenerationOrchestrator:
                     self._workspaces.update(updated, expected_revision=draft.revision)
                     accepted = True
                     break
-                except ModelUnavailable:
+                except ModelUnavailable as exc:
+                    last_error = f"model unavailable ({selected_model}): {exc}"
                     if run.fallback_model and selected_model != run.fallback_model:
                         selected_model = run.fallback_model
                     continue
-                except (NoJSONObject, ProviderError, ValidationError, ValueError):
+                except (NoJSONObject, ProviderError, ValidationError, ValueError) as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
+                    _logger.warning(
+                        "section %s attempt failed: %s", state.section_id, last_error
+                    )
                     continue
             states = list(run.sections)
             if not accepted:
