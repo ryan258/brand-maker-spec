@@ -71,3 +71,42 @@ class EvaluateArtifactRequest(ContractModel):
     rules: list[DeterministicRule] = Field(..., min_length=1, max_length=1_000)
     brand_version: str = Field(..., min_length=1, max_length=100)
     amendment_revision: int = Field(0, ge=0)
+
+
+class TokenCollisionFinding(ContractModel):
+    token_id: StableId
+    name: ShortText
+    sections: list[str]
+    collision_type: Literal["duplicate_id", "value_mismatch"]
+    values_by_section: dict[str, str | float | int | bool]
+    message: str
+
+
+class TokenContrastFinding(ContractModel):
+    foreground_token_id: StableId
+    foreground_token_name: ShortText
+    foreground_color: str
+    background_token_id: StableId
+    background_token_name: ShortText
+    background_color: str
+    contrast_ratio: float
+    passes_aa_normal: bool
+    passes_aa_large: bool
+    passes_aaa: bool
+    suggested_correction: str | None = None
+
+
+class CopyCheckViolation(ContractModel):
+    rule_id: StableId
+    rule_name: ShortText
+    enforcement: Literal["advisory", "warning", "blocking"]
+    matched_text: str | None = None
+    message: str
+    suggested_correction: str | None = None
+
+
+class CopyCheckReport(ContractModel):
+    copy_text: str
+    passed_rules_count: int
+    violations: list[CopyCheckViolation]
+    overall_status: Literal["pass", "warning", "fail"]
