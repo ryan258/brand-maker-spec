@@ -77,6 +77,10 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert '<label for="derivative-source">Source raster logo</label>' in page.text
     assert 'id="generate-to-brief" type="button"' in page.text
     assert 'getElementById("generate-to-brief")' in script.text
+    # The section nav must re-render after generation/status edits, not just at load.
+    assert "function renderNav()" in script.text
+    assert "renderPatterns();renderNav()" in script.text  # choose() refreshes the nav
+    assert "draft=await response.json();renderNav()" in script.text  # autosave refreshes it
     assert 'id="create-favicon-set" type="button"' in page.text
     assert 'id="create-logo-variants" type="button"' in page.text
     assert 'id="create-vector" type="button"' in page.text
