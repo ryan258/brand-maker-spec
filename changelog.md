@@ -27,16 +27,24 @@
 - **Idea 8:** Added a per-section content-completeness meter.
 - **Idea 9:** Made Prose, Rules, Tokens, Examples, and Patterns collapsible.
 - **Idea 10:** Added live word and character counts to narrative fields.
+- **Idea 11:** Added SSE-based live generation progress streaming.
+- **Idea 12:** Added single field/block regeneration with rationale tracing.
+- **Idea 15:** Added candidate section variant proposals across conservative, balanced, and bold postures.
 - **Idea 21:** Added favicon and app-icon crops for raster logos.
 - **Idea 22:** Added AI-generated monochrome, inverted, horizontal-lockup, and
   icon-only logo variants.
 - **Idea 23:** Added local raster-to-SVG logo vectorization.
+- **Idea 25:** Added validated font uploads with magic byte verification and safe `@font-face` CSS generation.
+- **Idea 30:** Added automated logo color contrast analysis against brand background tokens.
 - **Idea 31:** Added a reversible dark-mode bible preview derived from the brand's
   current paper and ink tokens, while keeping print output light.
 - **Idea 34:** Added reduced-motion-safe active table-of-contents tracking as the
   reader moves through the brand bible.
 - **Idea 58:** Added a durable local audit feed with changed fields and optional
   owner rationale for canonical edits.
+- **Idea 61:** Added copy compliance checking engine against active living brand rules.
+- **Idea 64:** Added cross-section token collision and duplicate key detection.
+- **Idea 66:** Added WCAG AA/AAA design token contrast pair auditing.
 - **Idea 68:** Added canonical validation for broken cross-section references.
 - **Idea 69:** Added a browser workflow for visible, expiring compliance exceptions
   and supporting evidence.

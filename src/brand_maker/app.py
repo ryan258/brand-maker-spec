@@ -1,5 +1,6 @@
 """FastAPI application factory and HTTP routes."""
 
+import asyncio
 import io
 import json
 import logging
@@ -22,7 +23,7 @@ from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -34,7 +35,13 @@ from brand_maker.brand_system.amendments import (
     SQLiteAmendmentRepository,
     StaleAmendmentValue,
 )
-from brand_maker.brand_system.assets import AssetChanged, AssetMissing, AssetStore
+from brand_maker.brand_system.assets import (
+    AssetChanged,
+    AssetMissing,
+    AssetStore,
+    generate_font_face_css,
+    validate_font_file_header,
+)
 from brand_maker.brand_system.audit import AuditPage, RevisionCommand
 from brand_maker.brand_system.backup import (
     MAX_BACKUP_BYTES,
@@ -103,7 +110,12 @@ from brand_maker.compliance.campaigns import (
     CampaignService,
     CreateCampaignRequest,
 )
-from brand_maker.compliance.deterministic import evaluate_artifact
+from brand_maker.compliance.copy_checker import check_copy_against_brand_rules
+from brand_maker.compliance.deterministic import (
+    audit_token_collisions,
+    audit_token_contrast_pairs,
+    evaluate_artifact,
+)
 from brand_maker.compliance.exceptions import (
     ComplianceException,
     ExceptionLedger,
@@ -131,7 +143,9 @@ from brand_maker.generation.orchestrator import (
     GenerationRunNotFound,
 )
 from brand_maker.generation.repository import (
+    GenerateSectionVariantsRequest,
     GenerationRun,
+    RegenerateFieldRequest,
     SQLiteGenerationRepository,
     StartGenerationRequest,
 )
@@ -142,6 +156,7 @@ from brand_maker.library_web import detail_page, library_page, not_found_page
 from brand_maker.logo_derivatives import (
     RASTER_MEDIA_TYPES,
     LogoDerivative,
+    check_logo_contrast_against_backgrounds,
     create_icon_set,
     vectorize_logo,
 )
@@ -226,10 +241,7 @@ def _build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
 
     for asset in draft.assets:
         if asset.size_bytes > MAX_ENTRY_BYTES and asset.required:
-            detail = (
-                f"Required asset '{asset.name}' exceeds maximum "
-                "single file size of 25 MB."
-            )
+            detail = f"Required asset '{asset.name}' exceeds maximum single file size of 25 MB."
             raise HTTPException(status_code=413, detail=detail)
 
     token_exports = export_draft_tokens(draft)
@@ -1842,5 +1854,311 @@ def create_app(
                 "Content-Disposition": _content_disposition(f"{draft.brand_name}-brand-kit.zip")
             },
         )
+
+    @app.get(
+        "/api/generation-runs/{run_id}/stream",
+        tags=["living brand generation"],
+    )
+    async def stream_generation_run(run_id: UUID, request: Request) -> StreamingResponse:
+        orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
+        try:
+            queue = await run_in_threadpool(orchestrator.subscribe, run_id)
+        except GenerationRunNotFound:
+            raise HTTPException(status_code=404, detail="Generation run not found.") from None
+
+        async def event_generator() -> AsyncIterator[str]:
+            try:
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        yield f"data: {json.dumps(event)}\n\n"
+                        if event.get("status") in {"completed", "cancelled", "failed"}:
+                            break
+                    except TimeoutError:
+                        yield ": keep-alive\n\n"
+            finally:
+                orchestrator.unsubscribe(run_id, queue)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/sections/{section_id}/fields/regenerate",
+        tags=["living brand generation"],
+    )
+    async def regenerate_section_field(
+        brand_id: UUID,
+        section_id: str,
+        payload: RegenerateFieldRequest,
+        request: Request,
+    ) -> dict[str, str]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        orchestrator = cast(
+            GenerationOrchestrator, request.app.state.generation_orchestrator
+        )
+        completer = cast(Completer | None, request.app.state.generation_completer)
+        settings = cast(Settings, request.app.state.settings)
+        if completer is None:
+            raise HTTPException(status_code=503, detail="Generation provider unavailable.")
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        return await orchestrator.regenerate_field(
+            draft=draft,
+            section_id=section_id,
+            field_label=payload.field_label,
+            current_text=payload.current_text,
+            instruction=payload.instruction,
+            model=payload.model or settings.primary_model,
+            completer=completer,
+        )
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/sections/{section_id}/variants",
+        tags=["living brand generation"],
+    )
+    async def generate_section_variants_route(
+        brand_id: UUID,
+        section_id: str,
+        payload: GenerateSectionVariantsRequest,
+        request: Request,
+    ) -> dict[str, list[dict[str, object]]]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        orchestrator = cast(
+            GenerationOrchestrator, request.app.state.generation_orchestrator
+        )
+        completer = cast(Completer | None, request.app.state.generation_completer)
+        settings = cast(Settings, request.app.state.settings)
+        if completer is None:
+            raise HTTPException(status_code=503, detail="Generation provider unavailable.")
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        variants = await orchestrator.generate_section_variants(
+            draft=draft,
+            section_id=section_id,
+            postures=payload.postures,
+            model=payload.model or settings.primary_model,
+            completer=completer,
+        )
+        return {"variants": variants}
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/fonts",
+        tags=["living brand assets"],
+    )
+    async def upload_font_asset(
+        brand_id: UUID,
+        request: Request,
+        file: UploadFile = File(...),
+        font_family: str = Form(..., min_length=1, max_length=300),
+        expected_revision: int | None = Form(default=None, ge=1),
+    ) -> dict[str, object]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        asset_store = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+        if expected_revision is not None and expected_revision != draft.revision:
+            raise HTTPException(
+                status_code=409,
+                detail="Stale revision: workspace was modified by another operation.",
+            )
+
+        content = bytearray()
+        while chunk := await file.read(64 * 1024):
+            content.extend(chunk)
+            if len(content) > 5_000_000:
+                raise HTTPException(status_code=422, detail="Font file exceeds 5MB limit.")
+
+        if not content:
+            raise HTTPException(status_code=422, detail="Font file is empty.")
+
+        font_bytes = bytes(content)
+        try:
+            font_fmt = validate_font_file_header(font_bytes)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        media_types = {
+            "woff": "font/woff",
+            "woff2": "font/woff2",
+            "truetype": "font/ttf",
+            "opentype": "font/otf",
+        }
+        media_type = media_types[font_fmt]
+        filename = file.filename or f"{font_family}.{font_fmt}"
+        try:
+            generate_font_face_css(font_family, media_type, "/")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_f:
+            temp_f.write(font_bytes)
+            temp_path = Path(temp_f.name)
+
+        registration: AssetRegistration | None = None
+        created_blob = False
+        try:
+            asset_id = f"asset.font.{uuid4().hex[:8]}"
+            imported_registration, created_blob = await run_in_threadpool(
+                asset_store.import_managed_with_status,
+                asset_id=asset_id,
+                name=filename,
+                source=temp_path,
+                media_type=media_type,
+                required=False,
+            )
+            registration = imported_registration
+            assets = [*draft.assets, imported_registration]
+            updated = draft.model_copy(update={"assets": assets, "revision": draft.revision + 1})
+            exp_rev = expected_revision if expected_revision is not None else draft.revision
+            await run_in_threadpool(
+                workspaces.update, updated, expected_revision=exp_rev
+            )
+
+            asset_url = (
+                f"/api/brand-systems/{brand_id}/assets/{imported_registration.content_hash}"
+            )
+            font_css = generate_font_face_css(font_family, media_type, asset_url)
+            return {
+                "asset": imported_registration.model_dump(mode="json"),
+                "font_family": font_family,
+                "font_face_css": font_css,
+            }
+        except StaleDraftRevision:
+            if (
+                registration is not None
+                and created_blob
+                and not await run_in_threadpool(
+                    workspaces.references_asset_hash, registration.content_hash
+                )
+            ):
+                await run_in_threadpool(asset_store.discard_managed, registration)
+            raise HTTPException(
+                status_code=409,
+                detail="Stale revision: workspace was modified by another operation.",
+            ) from None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    @app.post(
+        "/api/brand-systems/{brand_id}/compliance/check-copy",
+        tags=["living brand compliance"],
+    )
+    async def check_copy_compliance(
+        brand_id: UUID,
+        payload: dict[str, object],
+        request: Request,
+    ) -> dict[str, object]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        copy_text = str(payload.get("copy_text", ""))
+        if not copy_text:
+            raise HTTPException(status_code=422, detail="copy_text is required.")
+        report = check_copy_against_brand_rules(copy_text, draft)
+        return report.model_dump(mode="json")
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/token-collisions",
+        tags=["living brand compliance"],
+    )
+    async def get_token_collisions(
+        brand_id: UUID,
+        request: Request,
+    ) -> dict[str, object]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        findings = audit_token_collisions(draft.sections)
+        return {"collisions": [f.model_dump(mode="json") for f in findings]}
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/wcag-audit",
+        tags=["living brand compliance"],
+    )
+    async def get_wcag_token_audit(
+        brand_id: UUID,
+        request: Request,
+    ) -> dict[str, object]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        findings = audit_token_contrast_pairs(draft.sections)
+        return {"findings": [f.model_dump(mode="json") for f in findings]}
+
+    @app.get(
+        "/api/brand-systems/{brand_id}/logo-contrast-check",
+        tags=["living brand compliance"],
+    )
+    async def check_logo_contrast_route(
+        brand_id: UUID,
+        request: Request,
+    ) -> dict[str, object]:
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        asset_store = cast(AssetStore, request.app.state.asset_store)
+        draft = await run_in_threadpool(workspaces.get, brand_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+
+        logo_asset = next(
+            (
+                a
+                for a in draft.assets
+                if ("logo" in a.id or "logo" in a.name.lower())
+                and a.media_type in RASTER_MEDIA_TYPES
+            ),
+            None,
+        )
+        if logo_asset is None:
+            raise HTTPException(
+                status_code=422, detail="No registered raster logo asset found in workspace."
+            )
+
+        content = await run_in_threadpool(asset_store.read, logo_asset)
+        bg_tokens: list[tuple[str, str]] = []
+        for s in draft.sections:
+            for t in s.tokens:
+                if t.value_type == "color" and isinstance(t.value, str):
+                    if any(
+                        k in t.id.lower() or k in t.name.lower()
+                        for k in ["paper", "background", "surface"]
+                    ):
+                        bg_tokens.append((t.name, t.value))
+        if not bg_tokens:
+            bg_tokens = [("Paper Light", "#ffffff"), ("Paper Dark", "#111827")]
+
+        results = await run_in_threadpool(
+            check_logo_contrast_against_backgrounds, content, logo_asset.media_type, bg_tokens
+        )
+        return {"results": results}
 
     return app
