@@ -87,8 +87,14 @@ def test_repository_closes_each_connection_after_use(tmp_path: Path, monkeypatch
         return connection
 
     monkeypatch.setattr("brand_maker.storage.sqlite3.connect", tracking_connect)
-    SQLiteBrandRepository(tmp_path / "brands.db").get(UUID("7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4"))
+    store = SQLiteBrandRepository(tmp_path / "brands.db")
 
+    assert len(connections) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        connections[0].execute("SELECT 1")
+
+    connections.clear()
+    store.get(UUID("7b48b1ac-95e3-4fab-bf83-b7009ee2f6c4"))
     assert len(connections) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         connections[0].execute("SELECT 1")

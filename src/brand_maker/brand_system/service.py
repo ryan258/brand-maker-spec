@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from brand_maker.brand_system.catalog import SECTION_CATALOG
 from brand_maker.brand_system.editing import preview_section_edit
 from brand_maker.brand_system.models import (
     BrandSection,
@@ -25,23 +26,6 @@ from brand_maker.brand_system.repository import (
 )
 from brand_maker.models import BrandKit
 from brand_maker.storage import SQLiteBrandRepository
-
-SECTION_CATALOG = (
-    ("strategy", "Strategy"),
-    ("messaging", "Messaging"),
-    ("voice", "Voice"),
-    ("logo", "Logo guidance"),
-    ("color", "Color"),
-    ("typography", "Typography"),
-    ("layout", "Layout"),
-    ("imagery", "Imagery"),
-    ("illustration", "Illustration and iconography"),
-    ("motion", "Motion and sound"),
-    ("digital", "Digital products"),
-    ("channels", "Channels"),
-    ("accessibility", "Accessibility and inclusion"),
-    ("governance", "Governance"),
-)
 
 
 class SourceBrandNotFound(LookupError):
@@ -65,10 +49,7 @@ class InvalidSectionEdit(ValueError):
 
 
 def _blank_sections() -> list[BrandSection]:
-    return [
-        BrandSection(id=f"section.{section_id}", title=title)
-        for section_id, title in SECTION_CATALOG
-    ]
+    return [BrandSection(id=item.id, title=item.title) for item in SECTION_CATALOG.values()]
 
 
 def _migrated_sections(kit: BrandKit) -> list[BrandSection]:

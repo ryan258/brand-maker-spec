@@ -57,6 +57,16 @@ def test_repository_creates_and_reads_a_validated_snapshot(tmp_path: Path) -> No
     assert SQLiteBrandSystemRepository(store.path).get(original.brand_id) == original
 
 
+def test_repository_initializes_sqlite_for_concurrent_local_tabs(tmp_path: Path) -> None:
+    path = tmp_path / "brands.db"
+    SQLiteBrandSystemRepository(path)
+
+    with sqlite3.connect(path) as connection:
+        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert journal_mode == "wal"
+
+
 def test_existing_workspace_receives_a_non_reversible_history_baseline(tmp_path: Path) -> None:
     path = tmp_path / "brands.db"
     original = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Northstar")

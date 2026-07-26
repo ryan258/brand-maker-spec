@@ -1,4 +1,6 @@
+import asyncio
 import json
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -100,6 +102,17 @@ class SectionCompleter:
         )
 
 
+class SlowSectionCompleter(SectionCompleter):
+    async def complete(self, *, messages, model, temperature, max_tokens) -> str:
+        await asyncio.sleep(0.2)
+        return await super().complete(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+
 def client(tmp_path: Path) -> TestClient:
     settings = Settings(
         _env_file=None,
@@ -115,6 +128,21 @@ def client(tmp_path: Path) -> TestClient:
     )
 
 
+def slow_client(tmp_path: Path) -> TestClient:
+    settings = Settings(
+        _env_file=None,
+        openrouter_api_key="test-key",
+        database_path=tmp_path / "brands.db",
+    )
+    return TestClient(
+        create_app(
+            settings=settings,
+            pipeline=UnusedPipeline(),
+            generation_completer=SlowSectionCompleter(),
+        )
+    )
+
+
 def test_section_generation_run_can_start_resume_and_be_read(tmp_path: Path) -> None:
     with client(tmp_path) as api:
         draft = api.post(
@@ -126,16 +154,35 @@ def test_section_generation_run_can_start_resume_and_be_read(tmp_path: Path) -> 
             json={"target_section_id": "section.messaging"},
         )
         run_id = started.json()["id"]
-        completed = api.post(f"/api/generation-runs/{run_id}/resume")
-        fetched = api.get(f"/api/generation-runs/{run_id}")
+        accepted = api.post(f"/api/generation-runs/{run_id}/resume")
+        for _ in range(100):
+            fetched = api.get(f"/api/generation-runs/{run_id}")
+            if fetched.json()["status"] == "completed":
+                break
+            time.sleep(0.01)
         updated = api.get(f"/api/brand-systems/{draft['brand_id']}").json()
 
     assert started.status_code == 201
     assert started.json()["status"] == "pending"
-    assert completed.status_code == 200
-    assert completed.json()["status"] == "completed"
-    assert fetched.json() == completed.json()
+    assert accepted.status_code == 202
+    assert accepted.json()["status"] in {"pending", "running"}
+    assert fetched.json()["status"] == "completed"
     assert updated["revision"] == 3  # strategy prerequisite plus messaging
+
+
+def test_second_resume_does_not_queue_another_task_for_the_same_run(tmp_path: Path) -> None:
+    with slow_client(tmp_path) as api:
+        draft = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()
+        run = api.post(f"/api/brand-systems/{draft['brand_id']}/generation-runs", json={}).json()
+
+        first = api.post(f"/api/generation-runs/{run['id']}/resume")
+        second = api.post(f"/api/generation-runs/{run['id']}/resume")
+
+        assert first.status_code == second.status_code == 202
+        assert len(api.app.state.generation_tasks) == 1
 
 
 def test_generation_controls_are_idempotent_and_errors_are_bounded(tmp_path: Path) -> None:

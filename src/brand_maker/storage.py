@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from brand_maker.models import BrandKit, BrandSummary, SavedBrand
+from brand_maker.sqlite import connect_database, initialize_database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS saved_brands (
@@ -31,15 +32,12 @@ class SQLiteBrandRepository:
         self._path = path
         self._id_factory = id_factory
         self._clock = clock or (lambda: datetime.now(UTC))
+        initialize_database(path, SCHEMA)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self._path, timeout=5.0)
-        # ponytail: connect + schema-check per query; fine for local single-user.
-        # If load grows, keep a persistent connection and move to schema-once + PRAGMA WAL.
+        connection = connect_database(self._path)
         try:
-            connection.execute(SCHEMA)
             yield connection
             connection.commit()
         except Exception:

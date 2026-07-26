@@ -12,6 +12,19 @@ def _semantic_name(value: str) -> str:
     return cleaned or "token"
 
 
+def _css_value(value: str | float | int | bool) -> str:
+    """Keep a token inside its custom-property declaration."""
+
+    text = str(value)
+    escaped = "".join(
+        f"\\{ord(character):x} "
+        if character in "\\;{}" or ord(character) < 32 or ord(character) == 127
+        else character
+        for character in text
+    )
+    return escaped.replace("/*", "\\2f *").replace("*/", "*\\2f ")
+
+
 def export_draft_tokens(draft: WorkingDraft) -> dict[str, str]:
     safe_css_brand = re.sub(r"[\r\n]+", " ", draft.brand_name).replace("*/", "* /")
     safe_js_brand = re.sub(r"[\r\n]+", " ", draft.brand_name)
@@ -34,7 +47,7 @@ def export_draft_tokens(draft: WorkingDraft) -> dict[str, str]:
             key = base_key
 
         val = str(token.value)
-        css.append(f"  --brand-{key}: {val};")
+        css.append(f"  --brand-{key}: {_css_value(token.value)};")
         if token.value_type == "color":
             colors[key] = val
         elif token.value_type == "font":
@@ -81,7 +94,7 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
     patterns = [pattern for section in published.snapshot.sections for pattern in section.patterns]
     css = [f"/* brand-version: {published.version}; hash: {published.content_hash} */", ":root {"]
     for token in sorted(tokens, key=lambda item: item.id):
-        css.append(f"  --brand-{_semantic_name(token.id)}: {token.value};")
+        css.append(f"  --brand-{_semantic_name(token.id)}: {_css_value(token.value)};")
     css.append("}")
     metadata = {"version": published.version, "content_hash": published.content_hash}
     token_payload = {**metadata, "tokens": [item.model_dump(mode="json") for item in tokens]}

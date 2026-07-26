@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from brand_maker.brand_system.audit import AuditEvent
 from brand_maker.brand_system.models import WorkingDraft, WorkspaceSummary
 from brand_maker.brand_system.recovery import TrashRecord
+from brand_maker.sqlite import connect_database, initialize_database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS brand_system_workspaces (
@@ -120,6 +121,7 @@ class SQLiteBrandSystemRepository:
     ) -> None:
         self._path = path
         self._clock = clock or (lambda: datetime.now(UTC))
+        initialize_database(path, SCHEMA)
 
     @property
     def path(self) -> Path:
@@ -127,12 +129,8 @@ class SQLiteBrandSystemRepository:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self._path, timeout=5.0)
-        # ponytail: connect + schema-check per query; fine for local single-user.
-        # If load grows, keep a persistent connection and move to schema-once + PRAGMA WAL.
+        connection = connect_database(self._path)
         try:
-            connection.executescript(SCHEMA)
             yield connection
             connection.commit()
         except Exception:
@@ -211,22 +209,23 @@ class SQLiteBrandSystemRepository:
         """Return whether current or reversible workspace history references an asset blob."""
 
         with self._connect() as connection:
-            rows = connection.execute(
+            row = connection.execute(
                 """
-                SELECT draft_json FROM brand_system_workspaces
-                UNION ALL
-                SELECT before_json FROM brand_system_audit_events WHERE before_json IS NOT NULL
-                UNION ALL
-                SELECT after_json FROM brand_system_audit_events
-                """
-            ).fetchall()
-        for (payload_json,) in rows:
-            payload = json.loads(payload_json)
-            if any(
-                asset.get("content_hash") == content_hash for asset in payload.get("assets", [])
-            ):
-                return True
-        return False
+                SELECT 1
+                FROM (
+                    SELECT draft_json AS payload FROM brand_system_workspaces
+                    UNION ALL
+                    SELECT before_json FROM brand_system_audit_events
+                    WHERE before_json IS NOT NULL
+                    UNION ALL
+                    SELECT after_json FROM brand_system_audit_events
+                ) AS snapshots, json_each(snapshots.payload, '$.assets') AS asset
+                WHERE json_extract(asset.value, '$.content_hash') = ?
+                LIMIT 1
+                """,
+                (content_hash,),
+            ).fetchone()
+        return row is not None
 
     def get_including_trash(self, brand_id: UUID) -> WorkingDraft | None:
         with self._connect() as connection:

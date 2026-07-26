@@ -23,7 +23,7 @@ from brand_maker.generation.orchestrator import (
 )
 from brand_maker.generation.repository import SQLiteGenerationRepository
 from brand_maker.generation.sections import SECTION_CATALOG, prerequisite_closure
-from brand_maker.openrouter import ModelUnavailable
+from brand_maker.openrouter import ModelUnavailable, ProviderError
 
 
 class GoodCompleter:
@@ -135,6 +135,11 @@ class PrimaryUnavailable(GoodCompleter):
         return await super().complete(**kwargs)
 
 
+class LeakyProviderFailure:
+    async def complete(self, **kwargs) -> str:
+        raise ProviderError("upstream payload contained secret-token-123")
+
+
 def workspace(path: Path) -> tuple[SQLiteBrandSystemRepository, WorkingDraft]:
     store = SQLiteBrandSystemRepository(path)
     draft = WorkingDraft(
@@ -197,6 +202,19 @@ async def test_failed_run_resumes_without_repeating_accepted_work(tmp_path: Path
     assert completed.status == "completed"
     assert "section.strategy" not in good.calls
     assert good.calls[0] == "section.messaging"
+
+
+async def test_failed_run_persists_only_a_safe_error_summary(tmp_path: Path) -> None:
+    workspaces, draft = workspace(tmp_path / "brands.db")
+    runs = SQLiteGenerationRepository(tmp_path / "brands.db")
+    orchestrator = GenerationOrchestrator(workspaces=workspaces, runs=runs)
+    run = orchestrator.start(draft, target_section_id="section.strategy", model="test-model")
+
+    failed = await orchestrator.resume(run.id, completer=LeakyProviderFailure())
+
+    assert failed.status == "failed"
+    assert failed.sections[0].error == "Section generation failed."
+    assert "secret-token-123" not in failed.model_dump_json()
 
 
 async def test_generation_preserves_locked_sections_and_fails_over(tmp_path: Path) -> None:

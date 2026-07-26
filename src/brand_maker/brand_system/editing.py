@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from brand_maker.brand_system.models import (
     BrandExample,
+    BrandPattern,
     BrandRule,
     BrandSection,
     BrandToken,
@@ -20,11 +21,13 @@ def _items(section: BrandSection) -> dict[str, object]:
     result.update({item.id: item for item in section.rules})
     result.update({item.id: item for item in section.tokens})
     result.update({item.id: item for item in section.examples})
+    result.update({item.id: item for item in section.patterns})
     return result
 
 
 def _has_changed_reference(
-    item: NarrativeBlock | BrandRule | BrandToken | BrandExample, changed: list[str]
+    item: NarrativeBlock | BrandRule | BrandToken | BrandExample | BrandPattern,
+    changed: list[str],
 ) -> bool:
     return any(reference.target_id in changed for reference in item.references)
 
@@ -58,6 +61,9 @@ def preview_section_edit(
         for example in section.examples:
             if _has_changed_reference(example, changed):
                 affected_ids.add(example.id)
+        for pattern in section.patterns:
+            if _has_changed_reference(pattern, changed):
+                affected_ids.add(pattern.id)
     affected = sorted(affected_ids)
     sections = [replacement if item.id == replacement.id else item for item in draft.sections]
     payload = draft.model_dump(mode="json")

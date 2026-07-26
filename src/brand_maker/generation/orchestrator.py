@@ -392,14 +392,23 @@ class GenerationOrchestrator:
                     accepted = True
                     break
                 except ModelUnavailable as exc:
-                    last_error = f"model unavailable ({selected_model}): {exc}"
+                    last_error = "Model provider unavailable."
+                    _logger.warning(
+                        "section %s model %s unavailable: %s",
+                        state.section_id,
+                        selected_model,
+                        exc,
+                    )
                     if run.fallback_model and selected_model != run.fallback_model:
                         selected_model = run.fallback_model
                     continue
                 except (NoJSONObject, ProviderError, ValidationError, ValueError) as exc:
-                    last_error = f"{type(exc).__name__}: {exc}"
+                    last_error = "Section generation failed."
                     _logger.warning(
-                        "section %s attempt failed: %s", state.section_id, last_error
+                        "section %s attempt failed (%s): %s",
+                        state.section_id,
+                        type(exc).__name__,
+                        exc,
                     )
                     continue
             states = list(run.sections)

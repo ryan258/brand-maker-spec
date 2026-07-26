@@ -3,6 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from brand_maker.brand_system.service import SECTION_CATALOG as SERVICE_SECTION_CATALOG
 from brand_maker.generation.prompts import PROMPT_VERSION, section_messages
 from brand_maker.generation.sections import (
     REQUIRED_PATTERN_KINDS,
@@ -80,6 +81,7 @@ def envelope(section_id: str = "section.strategy") -> dict[str, object]:
 
 
 def test_catalog_covers_every_approved_content_domain_in_dependency_order() -> None:
+    assert SERVICE_SECTION_CATALOG is SECTION_CATALOG
     assert list(SECTION_CATALOG) == [
         "section.strategy",
         "section.messaging",

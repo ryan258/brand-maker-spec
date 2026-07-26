@@ -125,9 +125,10 @@ def read_workspace_backup(source: Path) -> tuple[WorkingDraft, dict[str, bytes]]
     return draft, asset_payloads
 
 
-def install_backup_assets(asset_root: Path, assets: dict[str, bytes]) -> None:
-    """Install validated content-addressed assets additively and atomically per file."""
+def install_backup_assets(asset_root: Path, assets: dict[str, bytes]) -> list[Path]:
+    """Install assets atomically and return newly created blobs for rollback."""
 
+    created: list[Path] = []
     for content_hash, payload in assets.items():
         destination = asset_root / content_hash[:2] / content_hash[2:]
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -138,10 +139,25 @@ def install_backup_assets(asset_root: Path, assets: dict[str, bytes]) -> None:
         )
         if existing_hash == content_hash:
             continue
+        was_missing = not destination.exists()
         with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as temporary:
             temporary.write(payload)
             temporary_path = Path(temporary.name)
         try:
             os.replace(temporary_path, destination)
+            if was_missing:
+                created.append(destination)
         finally:
             temporary_path.unlink(missing_ok=True)
+    return created
+
+
+def discard_installed_backup_assets(paths: list[Path]) -> None:
+    """Remove only blobs created by a restore whose database transaction failed."""
+
+    for path in paths:
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass

@@ -182,3 +182,39 @@ def test_asset_registration_api_updates_exact_workspace_revision(tmp_path: Path)
     assert response.status_code == 201
     assert response.json()["revision"] == 2
     assert response.json()["assets"][0]["storage"] == "managed"
+
+
+def test_asset_registration_api_rejects_paths_outside_configured_roots(
+    tmp_path: Path,
+) -> None:
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    outside_source = tmp_path / "outside.svg"
+    outside_source.write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8")
+    settings = Settings(
+        _env_file=None,
+        openrouter_api_key="test-key",
+        database_path=tmp_path / "brands.db",
+        asset_source_roots=[allowed_root],
+    )
+
+    with TestClient(create_app(settings=settings, pipeline=UnusedPipeline())) as api:
+        draft_payload = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()
+        response = api.post(
+            f"/api/brand-systems/{draft_payload['brand_id']}/assets",
+            json={
+                "expected_revision": 1,
+                "id": "asset.logo.primary",
+                "name": "Primary logo",
+                "storage": "linked",
+                "media_type": "image/svg+xml",
+                "source_path": str(outside_source),
+                "required": True,
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Asset source path is not allowed."}

@@ -1,6 +1,5 @@
 """Explicitly non-authoritative model judgment and scoped evidence records."""
 
-import sqlite3
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal, Self
@@ -10,6 +9,11 @@ from pydantic import Field, model_validator
 
 from brand_maker.brand_system.models import ShortText, StableId
 from brand_maker.models import ContractModel
+from brand_maker.sqlite import database_connection, initialize_database
+
+SCHEMA = """CREATE TABLE IF NOT EXISTS compliance_evidence (
+    id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, evidence_json TEXT NOT NULL
+)"""
 
 
 class JudgmentFinding(ContractModel):
@@ -52,6 +56,7 @@ class RegisterEvidenceRequest(ContractModel):
 class SQLiteEvidenceRepository:
     def __init__(self, path: Path) -> None:
         self._path = path
+        initialize_database(path, SCHEMA)
 
     def register(self, artifact_id: UUID, record: EvidenceRecord) -> RegisteredEvidence:
         registered = RegisteredEvidence(
@@ -60,12 +65,7 @@ class SQLiteEvidenceRepository:
             record=record,
             registered_at=datetime.now(UTC),
         )
-        with sqlite3.connect(self._path, timeout=5.0) as connection:
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS compliance_evidence (
-                   id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL,
-                   evidence_json TEXT NOT NULL)"""
-            )
+        with database_connection(self._path) as connection:
             connection.execute(
                 "INSERT INTO compliance_evidence VALUES (?, ?, ?)",
                 (str(registered.id), str(artifact_id), registered.model_dump_json()),
@@ -73,12 +73,7 @@ class SQLiteEvidenceRepository:
         return registered
 
     def get(self, evidence_id: UUID) -> RegisteredEvidence | None:
-        with sqlite3.connect(self._path, timeout=5.0) as connection:
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS compliance_evidence (
-                   id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL,
-                   evidence_json TEXT NOT NULL)"""
-            )
+        with database_connection(self._path) as connection:
             row = connection.execute(
                 "SELECT evidence_json FROM compliance_evidence WHERE id=?",
                 (str(evidence_id),),

@@ -110,3 +110,7 @@ class CopyCheckReport(ContractModel):
     passed_rules_count: int
     violations: list[CopyCheckViolation]
     overall_status: Literal["pass", "warning", "fail"]
+
+
+class CopyCheckRequest(ContractModel):
+    copy_text: str = Field(..., min_length=1, max_length=50_000)

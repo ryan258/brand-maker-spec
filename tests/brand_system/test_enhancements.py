@@ -13,14 +13,19 @@ from brand_maker.brand_system.assets import (
     validate_font_file_header,
 )
 from brand_maker.brand_system.models import (
+    BrandPattern,
     BrandRule,
     BrandSection,
     BrandToken,
     LocalOwner,
     NarrativeBlock,
+    PatternSpecification,
     WorkingDraft,
 )
-from brand_maker.compliance.copy_checker import check_copy_against_brand_rules
+from brand_maker.compliance.copy_checker import (
+    check_copy_against_brand_rules,
+    deterministic_copy_rules,
+)
 from brand_maker.compliance.deterministic import (
     audit_token_collisions,
     audit_token_contrast_pairs,
@@ -175,6 +180,66 @@ def test_copy_compliance_checker():
     assert bad_report.overall_status == "fail"
     assert len(bad_report.violations) >= 1
     assert any("parody" in v.message.lower() for v in bad_report.violations)
+
+
+def test_copy_compliance_uses_structured_never_say_specifications() -> None:
+    workspace = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Fieldwell",
+        owner=LocalOwner(display_name="Owner"),
+        revision=1,
+        sections=[
+            BrandSection(
+                id="section.voice",
+                title="Voice",
+                patterns=[
+                    BrandPattern(
+                        id="pattern.voice.language",
+                        name="Language choices",
+                        kind="say_never_say",
+                        summary="Approved language boundaries.",
+                        specifications=[
+                            PatternSpecification(label="Never say", value="game-changing")
+                        ],
+                        do_guidance=["Use concrete outcomes."],
+                        dont_guidance=["Avoid unsupported language."],
+                    )
+                ],
+            )
+        ],
+    )
+
+    report = check_copy_against_brand_rules("A game-changing platform.", workspace)
+
+    assert report.overall_status == "warning"
+    assert report.violations[0].matched_text == "game-changing"
+    rules = deterministic_copy_rules(workspace)
+    assert [(rule.kind, rule.parameter) for rule in rules] == [
+        ("forbidden_term", "game-changing")
+    ]
+
+
+def test_published_compliance_rule_ids_remain_within_contract_limits() -> None:
+    pattern = BrandPattern(
+        id="pattern." + "x" * 120,
+        name="Language choices",
+        kind="say_never_say",
+        summary="Approved language boundaries.",
+        specifications=[PatternSpecification(label="Never say", value="game-changing")],
+        do_guidance=["Use concrete outcomes."],
+        dont_guidance=["Avoid unsupported language."],
+    )
+    workspace = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Fieldwell",
+        owner=LocalOwner(display_name="Owner"),
+        revision=1,
+        sections=[BrandSection(id="section.voice", title="Voice", patterns=[pattern])],
+    )
+
+    rules = deterministic_copy_rules(workspace)
+
+    assert len(rules[0].id) <= 128
 
 
 def test_token_collision_audit():

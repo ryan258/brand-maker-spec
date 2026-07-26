@@ -1,6 +1,5 @@
 """Visible, expiring exceptions with append-only renewal approvals."""
 
-import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +11,11 @@ from pydantic import Field, model_validator
 
 from brand_maker.brand_system.models import ShortText, StableId
 from brand_maker.models import ContractModel
+from brand_maker.sqlite import database_connection, initialize_database
+
+SCHEMA = """CREATE TABLE IF NOT EXISTS compliance_exceptions (
+    id TEXT PRIMARY KEY, exception_json TEXT NOT NULL
+)"""
 
 
 class ExceptionRequest(ContractModel):
@@ -64,16 +68,12 @@ class ExceptionLedger:
         self._records: dict[UUID, ComplianceException] = {}
         self._lock = RLock()
         if path is not None:
-            with sqlite3.connect(path, timeout=5.0) as connection:
-                connection.execute(
-                    """CREATE TABLE IF NOT EXISTS compliance_exceptions (
-                       id TEXT PRIMARY KEY, exception_json TEXT NOT NULL)"""
-                )
+            initialize_database(path, SCHEMA)
 
     def _save(self, record: ComplianceException) -> None:
         self._records[record.id] = record
         if self._path is not None:
-            with sqlite3.connect(self._path, timeout=5.0) as connection:
+            with database_connection(self._path) as connection:
                 connection.execute(
                     """INSERT INTO compliance_exceptions VALUES (?, ?)
                        ON CONFLICT(id) DO UPDATE SET exception_json=excluded.exception_json""",
@@ -86,7 +86,7 @@ class ExceptionLedger:
                 return self._records[exception_id]
             if self._path is None:
                 return None
-            with sqlite3.connect(self._path, timeout=5.0) as connection:
+            with database_connection(self._path) as connection:
                 row = connection.execute(
                     "SELECT exception_json FROM compliance_exceptions WHERE id=?",
                     (str(exception_id),),

@@ -178,6 +178,31 @@ def test_copy_compliance_route(client):
         assert len(body["violations"]) == 1
 
 
+def test_copy_compliance_route_rejects_untyped_or_oversized_bodies(client):
+    tc, workspaces, _, _ = client
+    workspace = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Fieldwell",
+        owner=LocalOwner(display_name="Test Owner"),
+        revision=1,
+        sections=[],
+    )
+    workspaces.create(workspace)
+
+    with tc as api:
+        oversized = api.post(
+            f"/api/brand-systems/{workspace.brand_id}/compliance/check-copy",
+            json={"copy_text": "x" * 50_001},
+        )
+        extra = api.post(
+            f"/api/brand-systems/{workspace.brand_id}/compliance/check-copy",
+            json={"copy_text": "Allowed", "unexpected": True},
+        )
+
+    assert oversized.status_code == 422
+    assert extra.status_code == 422
+
+
 def test_token_collisions_route(client):
     tc, workspaces, _, _ = client
     section1 = BrandSection(

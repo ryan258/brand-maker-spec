@@ -22,6 +22,7 @@ def test_compliance_page_and_deterministic_api_are_accessible_and_labeled(
     )
     with TestClient(create_app(settings=settings, pipeline=UnusedPipeline())) as api:
         page = api.get("/compliance")
+        script = api.get("/assets/compliance.js")
         result = api.post(
             "/api/compliance/artifact-evaluations",
             json={
@@ -81,6 +82,9 @@ def test_compliance_page_and_deterministic_api_are_accessible_and_labeled(
     assert page.status_code == 200
     assert 'role="status"' in page.text
     assert "Exceptions and evidence" in page.text
+    assert 'id="brand-id"' in page.text
+    assert "/compliance-rules`" in script.text
+    assert 'parameter:"280"' not in script.text
     assert result.status_code == 201
     assert result.json()["findings"][0]["evaluation_type"] == "deterministic"
     assert result.json()["findings"][0]["status"] == "fail"

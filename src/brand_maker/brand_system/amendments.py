@@ -15,6 +15,7 @@ from brand_maker.brand_system.models import (
     WorkingDraft,
 )
 from brand_maker.brand_system.publication import SQLitePublicationRepository
+from brand_maker.sqlite import connect_database, initialize_database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS publication_amendments (
@@ -50,12 +51,12 @@ class SQLiteAmendmentRepository:
         self._path = path
         self._clock = clock or (lambda: datetime.now(UTC))
         self._id_factory = id_factory
+        initialize_database(path, SCHEMA)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self._path, timeout=5.0)
+        connection = connect_database(self._path)
         try:
-            connection.execute(SCHEMA)
             yield connection
             connection.commit()
         except Exception:

@@ -1,6 +1,5 @@
 """Durable SQLite ledger for resumable section-generation runs."""
 
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -9,6 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from brand_maker.models import ContractModel
+from brand_maker.sqlite import database_connection, initialize_database
 
 
 class SectionRunState(ContractModel):
@@ -69,10 +69,10 @@ CREATE TABLE IF NOT EXISTS generation_runs (
 class SQLiteGenerationRepository:
     def __init__(self, path: Path) -> None:
         self._path = path
+        initialize_database(path, SCHEMA)
 
     def save(self, run: GenerationRun) -> GenerationRun:
-        with sqlite3.connect(self._path, timeout=5.0) as connection:
-            connection.execute(SCHEMA)
+        with database_connection(self._path) as connection:
             connection.execute(
                 """INSERT INTO generation_runs VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET status=excluded.status,
@@ -88,8 +88,7 @@ class SQLiteGenerationRepository:
         return run
 
     def get(self, run_id: UUID) -> GenerationRun | None:
-        with sqlite3.connect(self._path, timeout=5.0) as connection:
-            connection.execute(SCHEMA)
+        with database_connection(self._path) as connection:
             row = connection.execute(
                 "SELECT run_json FROM generation_runs WHERE id = ?", (str(run_id),)
             ).fetchone()

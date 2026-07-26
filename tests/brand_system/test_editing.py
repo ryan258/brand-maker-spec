@@ -3,6 +3,15 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from brand_maker.app import create_app
+from brand_maker.brand_system.editing import preview_section_edit
+from brand_maker.brand_system.models import (
+    BrandPattern,
+    BrandSection,
+    CanonicalReference,
+    LocalOwner,
+    PatternSpecification,
+    WorkingDraft,
+)
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
 from brand_maker.config import Settings
 from brand_maker.models import BrandResponse
@@ -114,3 +123,51 @@ def test_locked_section_requires_explicit_overwrite_confirmation(tmp_path: Path)
     assert rejected.json() == {"detail": "Section is locked; confirmation required."}
     assert accepted.status_code == 200
     assert accepted.json()["revision"] == 3
+
+
+def test_impact_preview_includes_changed_and_dependent_patterns() -> None:
+    source_pattern = BrandPattern(
+        id="pattern.strategy.positioning",
+        name="Positioning",
+        kind="positioning_framework",
+        summary="Original positioning.",
+        specifications=[PatternSpecification(label="Frame", value="Original")],
+        do_guidance=["Use the original frame."],
+        dont_guidance=["Do not dilute it."],
+    )
+    dependent_pattern = BrandPattern(
+        id="pattern.messaging.hierarchy",
+        name="Message hierarchy",
+        kind="message_hierarchy",
+        summary="Builds on positioning.",
+        specifications=[PatternSpecification(label="Order", value="Promise then proof")],
+        do_guidance=["Lead with the promise."],
+        dont_guidance=["Do not bury the proof."],
+        references=[
+            CanonicalReference(kind="pattern", target_id="pattern.strategy.positioning")
+        ],
+    )
+    strategy = BrandSection(
+        id="section.strategy", title="Strategy", status="draft", patterns=[source_pattern]
+    )
+    messaging = BrandSection(
+        id="section.messaging", title="Messaging", status="draft", patterns=[dependent_pattern]
+    )
+    draft = WorkingDraft(
+        brand_id="11111111-1111-1111-1111-111111111111",
+        brand_name="Northstar",
+        owner=LocalOwner(display_name="Ryan"),
+        revision=1,
+        sections=[strategy, messaging],
+    )
+    replacement = strategy.model_copy(
+        update={
+            "patterns": [source_pattern.model_copy(update={"summary": "Updated positioning."})]
+        }
+    )
+
+    impact, candidate = preview_section_edit(draft, replacement)
+
+    assert candidate is not None
+    assert "pattern.strategy.positioning" in impact.changed_ids
+    assert "pattern.messaging.hierarchy" in impact.affected_ids

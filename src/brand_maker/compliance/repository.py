@@ -2,11 +2,14 @@
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from brand_maker.compliance.models import ArtifactEvaluation, ArtifactInput, ArtifactRevision
+from brand_maker.sqlite import database_connection, initialize_database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS compliance_artifacts (
@@ -29,11 +32,12 @@ CREATE TABLE IF NOT EXISTS compliance_evaluations (
 class SQLiteComplianceRepository:
     def __init__(self, path: Path) -> None:
         self._path = path
+        initialize_database(path, SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self._path, timeout=5.0)
-        connection.executescript(SCHEMA)
-        return connection
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with database_connection(self._path) as connection:
+            yield connection
 
     def register_artifact(self, artifact: ArtifactInput) -> ArtifactRevision:
         with self._connect() as connection:

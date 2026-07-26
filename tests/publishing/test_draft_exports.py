@@ -45,6 +45,38 @@ def test_export_draft_tokens_structures_css_json_and_tailwind() -> None:
     assert '"token-color-primary": "#1e40af"' in exports["tailwind.config.js"]
 
 
+def test_draft_css_escapes_token_values_that_could_end_a_declaration() -> None:
+    draft = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Aura Studio",
+        owner=LocalOwner(display_name="Tester"),
+        revision=1,
+        sections=[
+            BrandSection(
+                id="section.colors",
+                title="Colors",
+                status="draft",
+                tokens=[
+                    BrandToken(
+                        id="token.color.hostile",
+                        name="Hostile color",
+                        value_type="color",
+                        value="red; } body { color: magenta; /*",
+                    )
+                ],
+            )
+        ],
+    )
+
+    css = export_draft_tokens(draft)["tokens.css"]
+
+    assert "red; } body" not in css
+    escaped_declaration = (
+        "--brand-token-color-hostile: red\\3b  \\7d  body \\7b  color: magenta\\3b  \\2f *;"
+    )
+    assert escaped_declaration in css
+
+
 def test_draft_export_endpoints() -> None:
     with TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "test.db"
@@ -135,6 +167,8 @@ def test_asset_serving_endpoint() -> None:
             assert asset_res.status_code == 200
             assert asset_res.content == file_content
             assert asset_res.headers["content-type"] == "image/png"
+            assert asset_res.headers["content-security-policy"] == "default-src 'none'; sandbox"
+            assert asset_res.headers["x-content-type-options"] == "nosniff"
 
 
 def test_unicode_brand_name_headers() -> None:

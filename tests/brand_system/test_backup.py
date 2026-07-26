@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 from uuid import UUID
 
@@ -7,6 +8,8 @@ from brand_maker.brand_system.assets import AssetStore
 from brand_maker.brand_system.backup import (
     InvalidWorkspaceBackup,
     create_workspace_backup,
+    discard_installed_backup_assets,
+    install_backup_assets,
     read_workspace_backup,
 )
 from brand_maker.brand_system.models import AssetRegistration, LocalOwner, WorkingDraft
@@ -69,3 +72,22 @@ def test_backup_deduplicates_shared_asset_content_and_round_trips(tmp_path: Path
         "asset.logo.secondary",
     ]
     assert payloads == {first.content_hash: b"valid-logo-bytes"}
+
+
+def test_backup_asset_install_can_roll_back_only_new_blobs(tmp_path: Path) -> None:
+    existing_payload = b"existing"
+    existing_hash = hashlib.sha256(existing_payload).hexdigest()
+    new_payload = b"new"
+    new_hash = hashlib.sha256(new_payload).hexdigest()
+    existing_path = tmp_path / existing_hash[:2] / existing_hash[2:]
+    existing_path.parent.mkdir(parents=True)
+    existing_path.write_bytes(existing_payload)
+
+    created = install_backup_assets(
+        tmp_path,
+        {existing_hash: existing_payload, new_hash: new_payload},
+    )
+    discard_installed_backup_assets(created)
+
+    assert existing_path.read_bytes() == existing_payload
+    assert not (tmp_path / new_hash[:2] / new_hash[2:]).exists()

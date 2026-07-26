@@ -106,6 +106,9 @@ def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -
             },
         )
         detail = api.get(f"/api/brand-systems/{draft['brand_id']}/versions/1.0.0")
+        compliance_rules = api.get(
+            f"/api/brand-systems/{draft['brand_id']}/versions/1.0.0/compliance-rules"
+        )
         duplicate = api.post(
             f"/api/brand-systems/{draft['brand_id']}/versions",
             json={
@@ -125,6 +128,8 @@ def test_approved_draft_publishes_an_immutable_hashed_snapshot(tmp_path: Path) -
     assert payload["manifest"]["section_ids"][0] == "section.strategy"
     assert payload["approvals"][0]["rationale"] == "Ready for local use."
     assert detail.json() == payload
+    assert compliance_rules.status_code == 200
+    assert compliance_rules.json() == []
     assert duplicate.status_code == 409
     assert duplicate.json() == {"detail": "Published version already exists."}
 
