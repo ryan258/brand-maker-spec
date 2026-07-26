@@ -149,7 +149,7 @@ def test_asset_import_rejects_symlinks_unsupported_types_and_large_files(
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         raise AssertionError("asset registration must not invoke generation")
 
 

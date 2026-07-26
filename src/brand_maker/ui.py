@@ -8,6 +8,8 @@ UI_SCRIPT = r""""use strict";
 const form = document.getElementById("brand-form");
 const input = document.getElementById("brand-name");
 const count = document.getElementById("name-count");
+const context = document.getElementById("brand-context");
+const contextCount = document.getElementById("context-count");
 const submit = document.getElementById("generate-button");
 const submitLabel = document.getElementById("generate-label");
 const status = document.getElementById("generation-status");
@@ -28,11 +30,13 @@ function setText(element, value) {
 
 function updateCount() {
   count.textContent = `${input.value.length} / 80`;
+  contextCount.textContent = `${context.value.length.toLocaleString()} / 50,000`;
 }
 
 function setBusy(busy) {
   submit.disabled = busy;
   input.disabled = busy;
+  context.disabled = busy;
   form.setAttribute("aria-busy", String(busy));
   submit.classList.toggle("is-loading", busy);
   submitLabel.textContent = busy ? "Building your brand…" : "Generate brand kit";
@@ -149,6 +153,7 @@ form.addEventListener("submit", async (event) => {
     status.textContent = "Enter a brand name between 1 and 80 characters.";
     return;
   }
+  const brandContext = context.value.trim();
 
   setBusy(true);
   results.hidden = true;
@@ -158,7 +163,9 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/brands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brand_name: brandName }),
+      body: JSON.stringify(
+        brandContext ? { brand_name: brandName, brand_context: brandContext } : { brand_name: brandName },
+      ),
     });
     if (!response.ok) {
       renderMessage("error", await parseFailure(response));
@@ -176,11 +183,13 @@ form.addEventListener("submit", async (event) => {
 });
 
 input.addEventListener("input", updateCount);
+context.addEventListener("input", updateCount);
 resetButton.addEventListener("click", () => {
   results.hidden = true;
   currentResponse = null;
   viewSavedBrand.hidden = true;
   input.value = "";
+  context.value = "";
   updateCount();
   input.focus();
 });

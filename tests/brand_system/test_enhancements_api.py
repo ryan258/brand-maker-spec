@@ -81,7 +81,7 @@ class DummyCompleter:
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str):
+    async def build(self, brand_name: str, *, brand_context: str | None = None):
         raise AssertionError("Must not invoke generation")
 
 

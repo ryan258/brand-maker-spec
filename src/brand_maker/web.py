@@ -120,7 +120,7 @@ HOME_PAGE = """<!doctype html>
     .generator-header span { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.9rem; }
     .generator form { padding: 1.25rem; }
     .generator label { display: block; margin-bottom: 0.5rem; font-weight: 850; }
-    .generator input {
+    .generator input, .generator textarea {
       width: 100%;
       min-height: 3.5rem;
       padding: 0.75rem;
@@ -131,7 +131,9 @@ HOME_PAGE = """<!doctype html>
       font: inherit;
       font-size: 1.05rem;
     }
-    .generator input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .generator textarea { min-height: 6rem; resize: vertical; font-size: 0.95rem; }
+    .label-optional { font-weight: 500; color: var(--muted); }
+    .generator input:focus-visible, .generator textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
     .form-meta { display: flex; justify-content: space-between; gap: 1rem; margin: 0.45rem 0 1rem; color: var(--muted); font-size: 0.8rem; }
     .generate-button { width: 100%; cursor: pointer; }
     .generate-button:disabled { cursor: wait; opacity: 0.78; }
@@ -292,11 +294,14 @@ HOME_PAGE = """<!doctype html>
           <div class="actions"><a class="button" href="/brand-systems">Open living brands</a><a class="button secondary" href="#brand-form">Try a one-name quick start</a></div>
         </div>
         <aside class="generator" aria-labelledby="generator-heading">
-          <div class="generator-header"><strong id="generator-heading">Generate a quick starting point</strong><span>One name is all it takes.</span></div>
+          <div class="generator-header"><strong id="generator-heading">Generate a quick starting point</strong><span>A name is all it takes. Add context if you have it.</span></div>
           <form id="brand-form">
             <label for="brand-name">Brand or project name</label>
             <input id="brand-name" name="brand_name" type="text" required maxlength="80" autocomplete="off" placeholder="Try Fieldwell" aria-describedby="name-help name-count">
             <div class="form-meta"><span id="name-help">Use any serious, playful, or experimental direction.</span><span id="name-count">0 / 80</span></div>
+            <label for="brand-context">Anything else we should know <span class="label-optional">(optional)</span></label>
+            <textarea id="brand-context" name="brand_context" rows="4" maxlength="50000" placeholder="Paste notes, positioning, audience, or a whole existing brand bible." aria-describedby="context-help context-count"></textarea>
+            <div class="form-meta"><span id="context-help">Grounds the kit and every section you generate later.</span><span id="context-count">0 / 50,000</span></div>
             <button class="button generate-button" id="generate-button" type="submit"><span id="generate-label">Generate brand kit</span></button>
             <p class="generation-status" id="generation-status" role="status" aria-live="polite"></p>
           </form>

@@ -601,12 +601,12 @@ def create_app(
     @app.post("/brand", response_model=BrandResponse, tags=["brands"])
     async def build_brand(payload: BrandRequest, request: Request) -> BrandResponse:
         builder = cast(BrandBuilder, request.app.state.pipeline)
-        return await builder.build(payload.brand_name)
+        return await builder.build(payload.brand_name, brand_context=payload.brand_context)
 
     @app.post("/api/brands", response_model=SavedBrandGeneration, tags=["brand library"])
     async def create_saved_brand(payload: BrandRequest, request: Request) -> SavedBrandGeneration:
         builder = cast(BrandBuilder, request.app.state.pipeline)
-        result = await builder.build(payload.brand_name)
+        result = await builder.build(payload.brand_name, brand_context=payload.brand_context)
         if result.status != "ok":
             return SavedBrandGeneration(status=result.status, message=result.message)
 
@@ -619,6 +619,9 @@ def create_app(
             brand_systems.create,
             CreateWorkspaceRequest(
                 source_brand_id=saved.id,
+                # Carry the owner's own words into the workspace: every later section
+                # generation replays brand_context, so pasting it once grounds all of them.
+                brand_context=payload.brand_context,
                 owner_name="Local owner",
                 entry_path="quick_start",
                 assistance_mode="copilot",

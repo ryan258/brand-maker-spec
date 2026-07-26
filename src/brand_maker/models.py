@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 HEX = r"^#(?:[0-9a-fA-F]{6})$"
 
@@ -16,7 +16,7 @@ class ContractModel(BaseModel):
 
 
 class BrandRequest(ContractModel):
-    """The only thing the caller provides: a brand name."""
+    """A brand name, plus optional context the owner already has in hand."""
 
     brand_name: str = Field(
         ...,
@@ -24,6 +24,21 @@ class BrandRequest(ContractModel):
         max_length=80,
         description="The brand name to develop into a quick concept-stage kit.",
     )
+    # Matched to WorkingDraft's NarrativeText ceiling so a whole pasted brand bible fits.
+    # Capped there rather than uncapped: anything longer 422s on workspace create, which
+    # would waste a generation call first.
+    brand_context: str | None = Field(
+        None,
+        max_length=50_000,
+        description="Optional notes, positioning, or pasted material to ground the kit in.",
+    )
+
+    @field_validator("brand_context")
+    @classmethod
+    def _blank_context_is_absent(cls, value: str | None) -> str | None:
+        # Whitespace-only must read as "not supplied", or it beats the description fallback
+        # the workspace would otherwise inherit from the generated kit.
+        return value or None
 
 
 class ColorPalette(ContractModel):

@@ -23,6 +23,8 @@ category, convention, or alternative this brand reacts against. It may be a cate
 behavior, assumption, or company. Invent a specific concept, voice, and colors. Keep the
 requested brand_name exactly unchanged. Make the positioning clear, the voice internally
 consistent, all four colors distinct, and the result useful as a concept-stage draft.
+When the input carries brand_context, treat it as owner-supplied fact: ground the
+positioning, voice, and palette in it rather than inventing around it.
 Do not include markdown."""
 
 SAFETY_REPHRASE = (
@@ -30,11 +32,16 @@ SAFETY_REPHRASE = (
 )
 
 
-def generation_messages(brand_name: str, *, safety_rephrase: bool = False) -> list[dict[str, str]]:
+def generation_messages(
+    brand_name: str, *, safety_rephrase: bool = False, brand_context: str | None = None
+) -> list[dict[str, str]]:
     """Build messages while framing the caller's value as JSON data, not instructions."""
 
     prefix = SAFETY_REPHRASE if safety_rephrase else ""
-    user_payload = json.dumps({"brand_name": brand_name}, ensure_ascii=False)
+    payload: dict[str, str] = {"brand_name": brand_name}
+    if brand_context:
+        payload["brand_context"] = brand_context
+    user_payload = json.dumps(payload, ensure_ascii=False)
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"{prefix}Create the kit for this input: {user_payload}"},

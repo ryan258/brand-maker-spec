@@ -9,7 +9,7 @@ from brand_maker.storage import SQLiteBrandRepository
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         return BrandResponse(status="error", message="unused")
 
 

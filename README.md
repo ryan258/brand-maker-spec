@@ -76,7 +76,7 @@ compatibility, but parody is no longer the product's positioning or creative lim
 The original `POST /brand` endpoint remains stateless and backward-compatible. The
 browser uses the persistent library API:
 
-- `POST /api/brands`: generate and save a successful kit.
+- `POST /api/brands`: generate and save a successful kit (accepts optional `brand_name` and `brand_context` up to 50k chars).
 - `GET /api/brands?page=1&pageSize=12`: list saved brands newest first.
 - `GET /api/brands/{id}`: retrieve one complete saved brand.
 

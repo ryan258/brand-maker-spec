@@ -69,9 +69,12 @@ class OpenRouterClient:
         brand_name: str,
         model: str,
         safety_rephrase: bool = False,
+        brand_context: str | None = None,
     ) -> str:
         return await self.complete(
-            messages=generation_messages(brand_name, safety_rephrase=safety_rephrase),
+            messages=generation_messages(
+                brand_name, safety_rephrase=safety_rephrase, brand_context=brand_context
+            ),
             model=model,
             temperature=0.8,
             max_tokens=1500,

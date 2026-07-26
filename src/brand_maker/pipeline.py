@@ -43,11 +43,14 @@ class Generator(Protocol):
         brand_name: str,
         model: str,
         safety_rephrase: bool = False,
+        brand_context: str | None = None,
     ) -> str: ...
 
 
 class BrandBuilder(Protocol):
-    async def build(self, brand_name: str) -> BrandResponse: ...
+    async def build(
+        self, brand_name: str, *, brand_context: str | None = None
+    ) -> BrandResponse: ...
 
 
 class BrandPipeline:
@@ -58,7 +61,7 @@ class BrandPipeline:
         self._primary_model = primary_model
         self._fallback_model = fallback_model
 
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         model = self._primary_model
         failover_used = False
         safety_rephrase = False
@@ -70,6 +73,7 @@ class BrandPipeline:
                     brand_name=brand_name,
                     model=model,
                     safety_rephrase=safety_rephrase,
+                    brand_context=brand_context,
                 )
             except ModelUnavailable:
                 if not failover_used and model == self._primary_model:

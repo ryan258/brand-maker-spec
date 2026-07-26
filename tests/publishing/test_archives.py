@@ -18,7 +18,7 @@ from tests.publishing.helpers import published_version
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         raise AssertionError("archive import must not invoke generation")
 
 

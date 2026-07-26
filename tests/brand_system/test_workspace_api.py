@@ -16,7 +16,7 @@ _PNG = b"\x89PNG\r\n\x1a\n" + b"generated-logo-bytes"
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         raise AssertionError("workspace API must not invoke generation")
 
 

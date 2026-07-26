@@ -9,7 +9,7 @@ from brand_maker.models import BrandResponse
 
 
 class UnusedPipeline:
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         raise AssertionError("legacy generation must not be called")
 
 

@@ -14,9 +14,11 @@ class FakePipeline:
     def __init__(self, response: BrandResponse) -> None:
         self.response = response
         self.calls: list[str] = []
+        self.contexts: list[str | None] = []
 
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         self.calls.append(brand_name)
+        self.contexts.append(brand_context)
         return self.response
 
 
@@ -71,6 +73,38 @@ def test_create_brand_saves_success_and_exposes_full_detail(tmp_path: Path) -> N
     assert detail.json()["id"] == brand_id
     assert detail.json()["kit"]["tagline"] == "Search less. Guess more."
     assert pipeline.calls == ["Floogle"]
+    assert pipeline.contexts == [None]
+
+
+def test_quick_start_context_reaches_generation_and_the_workspace(tmp_path: Path) -> None:
+    # Pasted context is worth little if it only shapes the one-shot kit: it has to land on
+    # the workspace, which is what every later section generation replays.
+    pipeline = FakePipeline(BrandResponse(status="ok", kit=brand_kit()))
+    path = tmp_path / "brands.db"
+    store = SQLiteBrandRepository(path)
+    settings = Settings(_env_file=None, openrouter_api_key="test-key", database_path=path)
+    notes = "We sell refurbished lab equipment to university biology departments."
+
+    with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
+        created = client.post("/api/brands", json={"brand_name": "Floogle", "brand_context": notes})
+        workspace = client.get(f"/api/brand-systems/{created.json()['workspace_id']}")
+        # A whole pasted brand bible must fit; only past the workspace's own ceiling is it
+        # rejected, and rejected before a generation call is spent.
+        bible = client.post(
+            "/api/brands", json={"brand_name": "Floogle", "brand_context": "x" * 50_000}
+        )
+        too_long = client.post(
+            "/api/brands", json={"brand_name": "Floogle", "brand_context": "x" * 50_001}
+        )
+        blank = client.post("/api/brands", json={"brand_name": "Floogle", "brand_context": "   "})
+
+    assert created.status_code == 200
+    assert workspace.json()["brand_context"] == notes
+    assert bible.status_code == 200
+    assert too_long.status_code == 422
+    # Blank context must not count as supplied, or it displaces the kit description.
+    assert blank.status_code == 200
+    assert pipeline.contexts == [notes, "x" * 50_000, None]
 
 
 def test_trashed_quick_start_cannot_be_duplicated_from_its_saved_kit(tmp_path: Path) -> None:

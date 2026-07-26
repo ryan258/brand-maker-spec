@@ -33,9 +33,18 @@ class ScriptedGenerator:
     def __init__(self, outcomes: Sequence[str | Exception]) -> None:
         self.outcomes = list(outcomes)
         self.calls: list[tuple[str, str, bool]] = []
+        self.contexts: list[str | None] = []
 
-    async def generate(self, *, brand_name: str, model: str, safety_rephrase: bool = False) -> str:
+    async def generate(
+        self,
+        *,
+        brand_name: str,
+        model: str,
+        safety_rephrase: bool = False,
+        brand_context: str | None = None,
+    ) -> str:
         self.calls.append((brand_name, model, safety_rephrase))
+        self.contexts.append(brand_context)
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome

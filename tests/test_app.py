@@ -14,7 +14,7 @@ class FakePipeline:
         self.response = response
         self.calls: list[str] = []
 
-    async def build(self, brand_name: str) -> BrandResponse:
+    async def build(self, brand_name: str, *, brand_context: str | None = None) -> BrandResponse:
         self.calls.append(brand_name)
         return self.response
 

@@ -21,6 +21,7 @@
   the workspace concept and maturity stage, are supplied to every section-generation
   request. Added an **Update to match brief** control that regenerates unlocked
   sections to obey the current brief while preserving locked sections.
+- Added optional `brand_context` input to quick-start generations and API requests (`POST /api/brands`), allowing initial brand notes (up to 50,000 characters) to be passed safely into quick-start generation and automatically populated on the living workspace.
 
 - **Idea 1:** Moved AI logo generation above the section editor.
 - **Idea 2:** Added inline logo and image thumbnails to the asset list.
