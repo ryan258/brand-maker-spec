@@ -109,11 +109,12 @@ service does not expose provider payloads, credentials, or partial model output.
 | Variable | Required | Default |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | Yes | — |
-| `BRAND_MAKER_PRIMARY_MODEL` | No | `poolside/laguna-s-2.1:free` |
+| `BRAND_MAKER_PRIMARY_MODEL` | No | `google/gemini-3.5-flash-lite` |
 | `BRAND_MAKER_FALLBACK_MODEL` | No | `anthropic/claude-sonnet-4.5` |
 | `BRAND_MAKER_JUDGE_MODEL` | No | `anthropic/claude-sonnet-4.5` |
 | `BRAND_MAKER_REQUEST_TIMEOUT_SECONDS` | No | `45` |
 | `BRAND_MAKER_DATABASE_PATH` | No | `.brand-maker/brands.db` |
+| `BRAND_MAKER_ASSET_SOURCE_ROOTS` | No | Database directory only |
 
 The database and managed-asset directory are created on first use and excluded from
 Git. Back up both the configured database file and its sibling `assets/` directory.
@@ -124,9 +125,20 @@ checksum-bound and can restore their managed assets without original source path
 Legacy records are never destructively migrated. Creating a living workspace from a
 saved kit copies its content and provenance; the source kit remains unchanged.
 
-The spec's original `anthropic/claude-3.5-sonnet` fallback is retired. The shipped
-default is the currently available Sonnet 4.5 slug; every model remains overridable
-without a code change.
+The primary, fallback, and judge defaults are defined once in `Settings` and mirrored
+here and in `.env.example`; every model remains overridable without a code change.
+
+## Local security boundary
+
+This is an unauthenticated, single-owner local application. The CLI binds to
+`127.0.0.1` by default and refuses non-loopback hosts unless
+`--allow-network-bind` is supplied explicitly. Only use that override behind an
+authentication and TLS gate. `owner_id` records attribution; it is not access
+control.
+
+The path-based asset registration API may read only from
+`BRAND_MAKER_ASSET_SOURCE_ROOTS` (a JSON list of directories), or from the database
+directory when the variable is omitted. Prefer browser uploads for ordinary use.
 
 ## Verification
 

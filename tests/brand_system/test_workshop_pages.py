@@ -75,8 +75,14 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'id="evidence-privacy"' in page.text
     assert 'id="editor-status" role="status" aria-live="polite"' in page.text
     assert '<label for="derivative-source">Source raster logo</label>' in page.text
-    assert 'id="generate-to-brief" type="button"' in page.text
-    assert 'getElementById("generate-to-brief")' in script.text
+    assert 'id="generate-to-brief"' not in page.text
+    assert "Update to match brief" not in script.text
+    assert "Generate or refresh complete draft" in script.text
+    assert "EventSource" in script.text
+    assert "/stream`" in script.text
+    assert "pollGeneration" in script.text
+    assert "Live progress disconnected. Checking run status" in script.text
+    assert "Generate or refresh complete draft" in page.text
     # The section nav must re-render after generation/status edits, not just at load.
     assert "function renderNav()" in script.text
     assert "renderPatterns();renderNav()" in script.text  # choose() refreshes the nav
@@ -86,6 +92,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert 'id="create-vector" type="button"' in page.text
     assert 'id="derivative-status" role="status" aria-live="polite"' in page.text
     assert script.status_code == 200
+    assert script.headers["cache-control"] == "no-cache"
+    assert script.headers["x-content-type-options"] == "nosniff"
     assert "fetch(`/api/brand-systems/${encodeURIComponent(brandId)}`)" in script.text
     assert 'get("sourceBrandId")' in script.text
     assert "source_brand_id:sourceBrandId||null" in script.text
@@ -100,6 +108,8 @@ def test_workshop_detail_has_section_editor_and_safe_script(tmp_path: Path) -> N
     assert "/brief`" in script.text
     assert "/evidence`" in script.text
     assert styles.status_code == 200
+    assert styles.headers["cache-control"] == "no-cache"
+    assert styles.headers["x-content-type-options"] == "nosniff"
     assert "@media (max-width: 48rem)" in styles.text
     assert "prefers-reduced-motion" in styles.text
 

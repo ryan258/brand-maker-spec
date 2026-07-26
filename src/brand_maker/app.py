@@ -18,17 +18,11 @@ from uuid import UUID, uuid4
 
 import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.openapi.docs import (
-    get_redoc_html,
-    get_swagger_ui_html,
-    get_swagger_ui_oauth2_redirect_html,
-)
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from brand_maker.brand_bible import render_brand_bible
-from brand_maker.brand_bible_styles import BRAND_BIBLE_CSS
 from brand_maker.brand_system.amendments import (
     AmendmentRevisionNotFound,
     AmendmentTargetNotClerical,
@@ -47,6 +41,7 @@ from brand_maker.brand_system.backup import (
     MAX_BACKUP_BYTES,
     InvalidWorkspaceBackup,
     create_workspace_backup,
+    discard_installed_backup_assets,
     install_backup_assets,
     read_workspace_backup,
 )
@@ -106,53 +101,36 @@ from brand_maker.brand_system.service import (
     WorkspaceNotFound,
 )
 from brand_maker.compliance.campaigns import (
-    CampaignResult,
     CampaignService,
-    CreateCampaignRequest,
 )
 from brand_maker.compliance.copy_checker import check_copy_against_brand_rules
 from brand_maker.compliance.deterministic import (
     audit_token_collisions,
     audit_token_contrast_pairs,
-    evaluate_artifact,
 )
 from brand_maker.compliance.exceptions import (
-    ComplianceException,
     ExceptionLedger,
-    ExceptionRequest,
-    RenewExceptionRequest,
 )
 from brand_maker.compliance.judgment import (
-    RegisteredEvidence,
-    RegisterEvidenceRequest,
     SQLiteEvidenceRepository,
 )
 from brand_maker.compliance.models import (
-    ArtifactEvaluation,
-    ArtifactInput,
-    ArtifactRevision,
-    EvaluateArtifactRequest,
+    CopyCheckReport,
+    CopyCheckRequest,
 )
 from brand_maker.compliance.repository import SQLiteComplianceRepository
-from brand_maker.compliance_ui import COMPLIANCE_SCRIPT
-from brand_maker.compliance_web import compliance_page
 from brand_maker.config import Settings
 from brand_maker.generation.orchestrator import (
     Completer,
     GenerationOrchestrator,
-    GenerationRunNotFound,
 )
 from brand_maker.generation.repository import (
     GenerateSectionVariantsRequest,
-    GenerationRun,
     RegenerateFieldRequest,
     SQLiteGenerationRepository,
-    StartGenerationRequest,
 )
+from brand_maker.http import BROWSER_HEADERS, asset_response
 from brand_maker.image_gen import OpenRouterImageClient, logo_prompt, logo_variant_prompt
-from brand_maker.library_styles import LIBRARY_CSS
-from brand_maker.library_ui import LIBRARY_SCRIPT
-from brand_maker.library_web import detail_page, library_page, not_found_page
 from brand_maker.logo_derivatives import (
     RASTER_MEDIA_TYPES,
     LogoDerivative,
@@ -191,25 +169,12 @@ from brand_maker.publishing.markdown import export_markdown
 from brand_maker.publishing.pdf import render_html_pdf, render_pdf
 from brand_maker.publishing.projections import Audience, project
 from brand_maker.publishing.web import render_projection
+from brand_maker.routes.compliance import router as compliance_router
+from brand_maker.routes.generation import router as generation_router
+from brand_maker.routes.pages import router as pages_router
 from brand_maker.storage import SQLiteBrandRepository
-from brand_maker.ui import UI_SCRIPT
-from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
-from brand_maker.workshop_styles import WORKSHOP_CSS
-from brand_maker.workshop_ui import WORKSHOP_SCRIPT
-from brand_maker.workshop_web import workspace_detail, workspace_index
 
 logger = logging.getLogger(__name__)
-
-BROWSER_HEADERS = {
-    "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self'; connect-src 'self'; base-uri 'none'; "
-        "form-action 'self'; frame-ancestors 'none'"
-    ),
-    "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff",
-}
-
 
 def _content_disposition(filename: str, prefix: str = "attachment") -> str:
     ascii_filename = re.sub(r"[^\x20-\x7E]", "_", filename).replace('"', "_").strip()
@@ -223,6 +188,12 @@ def _safe_zip_filename(name: str) -> str:
     base = Path(name).name
     cleaned = re.sub(r"[^a-zA-Z0-9_ .-]", "_", base).strip(". ")
     return cleaned or "file"
+
+
+def _asset_source_is_allowed(source: Path, settings: Settings) -> bool:
+    candidate = source.expanduser().resolve()
+    configured_roots = settings.asset_source_roots or [settings.database_path.parent]
+    return any(candidate.is_relative_to(root.expanduser().resolve()) for root in configured_roots)
 
 
 def _build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
@@ -400,6 +371,15 @@ async def _load_derivative_source(
     return workspaces, assets, draft, source, content
 
 
+async def _cancel_generation_tasks(app: FastAPI) -> None:
+    tasks = cast(dict[UUID, asyncio.Task[object]], app.state.generation_tasks)
+    for task in tasks.values():
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
+    tasks.clear()
+
+
 def create_app(
     *,
     settings: Settings | None = None,
@@ -447,10 +427,14 @@ def create_app(
             runs=app.state.generation_repository,
         )
         app.state.generation_completer = generation_completer
+        app.state.generation_tasks = {}
 
         if pipeline is not None:
             app.state.pipeline = pipeline
-            yield
+            try:
+                yield
+            finally:
+                await _cancel_generation_tasks(app)
             return
 
         timeout = httpx.Timeout(resolved_settings.request_timeout_seconds)
@@ -467,7 +451,10 @@ def create_app(
                 primary_model=resolved_settings.primary_model,
                 fallback_model=resolved_settings.fallback_model,
             )
-            yield
+            try:
+                yield
+            finally:
+                await _cancel_generation_tasks(app)
 
     app = FastAPI(
         title="Brand System Maker",
@@ -481,122 +468,9 @@ def create_app(
         swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
         lifespan=lifespan,
     )
-    openapi_url = app.openapi_url or "/openapi.json"
-
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    async def root() -> HTMLResponse:
-        return HTMLResponse(HOME_PAGE, headers=BROWSER_HEADERS)
-
-    @app.get("/assets/app.js", include_in_schema=False)
-    async def ui_script() -> Response:
-        return Response(
-            UI_SCRIPT,
-            media_type="text/javascript",
-            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
-        )
-
-    @app.get("/assets/library.js", include_in_schema=False)
-    async def library_script() -> Response:
-        return Response(
-            LIBRARY_SCRIPT,
-            media_type="text/javascript",
-            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
-        )
-
-    @app.get("/assets/library.css", include_in_schema=False)
-    async def library_styles() -> Response:
-        return Response(
-            LIBRARY_CSS,
-            media_type="text/css",
-            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
-        )
-
-    @app.get("/assets/workshop.js", include_in_schema=False)
-    async def workshop_script() -> Response:
-        return Response(WORKSHOP_SCRIPT, media_type="text/javascript")
-
-    @app.get("/assets/workshop.css", include_in_schema=False)
-    async def workshop_styles() -> Response:
-        return Response(WORKSHOP_CSS, media_type="text/css")
-
-    @app.get("/assets/brand-bible.css", include_in_schema=False)
-    async def brand_bible_styles() -> Response:
-        return Response(
-            BRAND_BIBLE_CSS,
-            media_type="text/css",
-            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
-        )
-
-    @app.get("/assets/compliance.js", include_in_schema=False)
-    async def compliance_script() -> Response:
-        return Response(COMPLIANCE_SCRIPT, media_type="text/javascript")
-
-    @app.get("/brand-systems", response_class=HTMLResponse, include_in_schema=False)
-    async def brand_system_index() -> HTMLResponse:
-        return HTMLResponse(workspace_index(), headers=BROWSER_HEADERS)
-
-    @app.get("/compliance", response_class=HTMLResponse, include_in_schema=False)
-    async def compliance_workflow() -> HTMLResponse:
-        return HTMLResponse(compliance_page(), headers=BROWSER_HEADERS)
-
-    @app.get("/brand-systems/{brand_id}", response_class=HTMLResponse, include_in_schema=False)
-    async def brand_system_workshop(brand_id: UUID, request: Request) -> HTMLResponse:
-        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
-        if await run_in_threadpool(store.get, brand_id) is None:
-            raise HTTPException(status_code=404, detail="Brand system not found.")
-        return HTMLResponse(workspace_detail(brand_id), headers=BROWSER_HEADERS)
-
-    @app.get(
-        "/brand-systems/{brand_id}/bible",
-        response_class=HTMLResponse,
-        include_in_schema=False,
-    )
-    async def brand_system_bible(brand_id: UUID, request: Request) -> HTMLResponse:
-        store = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
-        draft = await run_in_threadpool(store.get, brand_id)
-        if draft is None:
-            raise HTTPException(status_code=404, detail="Brand system not found.")
-        return HTMLResponse(render_brand_bible(draft), headers=BROWSER_HEADERS)
-
-    @app.get("/brands", response_class=HTMLResponse, include_in_schema=False)
-    async def brand_library_page() -> HTMLResponse:
-        return HTMLResponse(library_page(), headers=BROWSER_HEADERS)
-
-    @app.get("/brands/{brand_id}", response_class=HTMLResponse, include_in_schema=False)
-    async def saved_brand_page(brand_id: UUID, request: Request) -> HTMLResponse:
-        store = cast(SQLiteBrandRepository, request.app.state.repository)
-        saved = await run_in_threadpool(store.get, brand_id)
-        if saved is None:
-            return HTMLResponse(not_found_page(), status_code=404, headers=BROWSER_HEADERS)
-        return HTMLResponse(detail_page(brand_id), headers=BROWSER_HEADERS)
-
-    # FastAPI's supported custom-docs hooks let us retain its generated viewers while
-    # adding project navigation: https://fastapi.tiangolo.com/how-to/custom-docs-ui-assets/
-    @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
-    async def swagger_docs() -> HTMLResponse:
-        page = get_swagger_ui_html(
-            openapi_url=openapi_url,
-            title=f"{app.title} — API console",
-            oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
-        )
-        return add_home_navigation(page)
-
-    @app.get("/docs/oauth2-redirect", include_in_schema=False)
-    async def swagger_oauth2_redirect() -> HTMLResponse:
-        return get_swagger_ui_oauth2_redirect_html()
-
-    @app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
-    async def redoc_docs() -> HTMLResponse:
-        page = get_redoc_html(openapi_url=openapi_url, title=f"{app.title} — Reference")
-        return add_home_navigation(page)
-
-    @app.get("/favicon.svg", include_in_schema=False)
-    async def favicon() -> Response:
-        return Response(FAVICON, media_type="image/svg+xml")
-
-    @app.get("/health", tags=["operations"])
-    async def health() -> dict[str, str]:
-        return {"status": "up"}
+    app.include_router(generation_router)
+    app.include_router(compliance_router)
+    app.include_router(pages_router)
 
     @app.post("/brand", response_model=BrandResponse, tags=["brands"])
     async def build_brand(payload: BrandRequest, request: Request) -> BrandResponse:
@@ -660,135 +534,6 @@ def create_app(
         if saved is None:
             raise HTTPException(status_code=404, detail="Brand not found.")
         return saved
-
-    @app.post(
-        "/api/compliance/artifacts",
-        response_model=ArtifactRevision,
-        status_code=201,
-        tags=["brand compliance"],
-    )
-    async def register_compliance_artifact(
-        payload: ArtifactInput, request: Request
-    ) -> ArtifactRevision:
-        store = cast(SQLiteComplianceRepository, request.app.state.compliance_repository)
-        return await run_in_threadpool(store.register_artifact, payload)
-
-    @app.post(
-        "/api/compliance/artifact-evaluations",
-        response_model=ArtifactEvaluation,
-        status_code=201,
-        tags=["brand compliance"],
-    )
-    async def create_artifact_evaluation(
-        payload: EvaluateArtifactRequest, request: Request
-    ) -> ArtifactEvaluation:
-        store = cast(SQLiteComplianceRepository, request.app.state.compliance_repository)
-        await run_in_threadpool(store.register_artifact, payload.artifact)
-        evaluation = await run_in_threadpool(
-            partial(
-                evaluate_artifact,
-                payload.artifact,
-                rules=payload.rules,
-                brand_version=payload.brand_version,
-                amendment_revision=payload.amendment_revision,
-                tool_version=app.version,
-            )
-        )
-        return await run_in_threadpool(store.save_evaluation, evaluation)
-
-    @app.post(
-        "/api/compliance/exceptions",
-        response_model=ComplianceException,
-        status_code=201,
-        tags=["brand compliance"],
-    )
-    async def create_compliance_exception(
-        payload: ExceptionRequest, request: Request
-    ) -> ComplianceException:
-        ledger = cast(ExceptionLedger, request.app.state.exception_ledger)
-        try:
-            return await run_in_threadpool(partial(ledger.approve, payload, owner_id="local-owner"))
-        except ValueError:
-            raise HTTPException(
-                status_code=422, detail="Exception expiration must be in the future."
-            ) from None
-
-    @app.get(
-        "/api/compliance/exceptions/{exception_id}",
-        response_model=ComplianceException,
-        tags=["brand compliance"],
-    )
-    async def get_compliance_exception(exception_id: UUID, request: Request) -> ComplianceException:
-        ledger = cast(ExceptionLedger, request.app.state.exception_ledger)
-        record = await run_in_threadpool(ledger.get, exception_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail="Compliance exception not found.")
-        return record
-
-    @app.post(
-        "/api/compliance/exceptions/{exception_id}/renewals",
-        response_model=ComplianceException,
-        tags=["brand compliance"],
-    )
-    async def renew_compliance_exception(
-        exception_id: UUID, payload: RenewExceptionRequest, request: Request
-    ) -> ComplianceException:
-        ledger = cast(ExceptionLedger, request.app.state.exception_ledger)
-        try:
-            return await run_in_threadpool(
-                partial(ledger.renew, exception_id, expires_at=payload.expires_at)
-            )
-        except KeyError:
-            raise HTTPException(status_code=404, detail="Compliance exception not found.") from None
-        except ValueError:
-            raise HTTPException(
-                status_code=422, detail="Renewal must extend the expiration."
-            ) from None
-
-    @app.post(
-        "/api/compliance/evidence",
-        response_model=RegisteredEvidence,
-        status_code=201,
-        tags=["brand compliance"],
-    )
-    async def register_compliance_evidence(
-        payload: RegisterEvidenceRequest, request: Request
-    ) -> RegisteredEvidence:
-        evidence = cast(SQLiteEvidenceRepository, request.app.state.evidence_repository)
-        return await run_in_threadpool(evidence.register, payload.artifact_id, payload.evidence)
-
-    @app.post(
-        "/api/compliance/campaigns",
-        response_model=CampaignResult,
-        status_code=201,
-        tags=["brand compliance"],
-    )
-    async def create_compliance_campaign(
-        payload: CreateCampaignRequest, request: Request
-    ) -> CampaignResult:
-        campaigns = cast(CampaignService, request.app.state.campaign_service)
-        return await run_in_threadpool(
-            partial(
-                campaigns.evaluate,
-                name=payload.name,
-                artifact_revisions=payload.artifacts,
-                brand_version=payload.brand_version,
-                amendment_revision=payload.amendment_revision,
-                atomic_evaluations=payload.atomic_evaluations,
-            )
-        )
-
-    @app.get(
-        "/api/compliance/campaigns/{campaign_id}",
-        response_model=CampaignResult,
-        tags=["brand compliance"],
-    )
-    async def get_compliance_campaign(campaign_id: UUID, request: Request) -> CampaignResult:
-        campaigns = cast(CampaignService, request.app.state.campaign_service)
-        result = await run_in_threadpool(campaigns.get, campaign_id)
-        if result is None:
-            raise HTTPException(status_code=404, detail="Compliance campaign not found.")
-        return result
 
     @app.post(
         "/api/brand-systems",
@@ -985,7 +730,7 @@ def create_app(
         ):
             raise HTTPException(status_code=409, detail="Draft revision conflict.")
         settings_for_restore = cast(Settings, request.app.state.settings)
-        await run_in_threadpool(
+        created_assets = await run_in_threadpool(
             install_backup_assets,
             settings_for_restore.database_path.parent / "assets",
             asset_payloads,
@@ -999,7 +744,11 @@ def create_app(
                 )
             )
         except StaleDraftRevision:
+            await run_in_threadpool(discard_installed_backup_assets, created_assets)
             raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+        except Exception:
+            await run_in_threadpool(discard_installed_backup_assets, created_assets)
+            raise
 
     @app.delete(
         "/api/brand-systems/{brand_id}",
@@ -1192,6 +941,9 @@ def create_app(
         if draft.revision != payload.expected_revision:
             raise HTTPException(status_code=409, detail="Draft revision conflict.")
         source = Path(payload.source_path)
+        settings = cast(Settings, request.app.state.settings)
+        if not _asset_source_is_allowed(source, settings):
+            raise HTTPException(status_code=422, detail="Asset source path is not allowed.")
         try:
             if payload.storage == "managed":
                 registration = await run_in_threadpool(
@@ -1356,16 +1108,7 @@ def create_app(
             content = await run_in_threadpool(assets.read, asset)
         except (AssetMissing, AssetChanged, ValueError):
             raise HTTPException(status_code=404, detail="Asset content unavailable.") from None
-        # Uploaded SVG can carry script; sandbox it so direct navigation can't run it.
-        return Response(
-            content,
-            media_type=asset.media_type,
-            headers={
-                "Content-Security-Policy": "default-src 'none'; sandbox",
-                "X-Content-Type-Options": "nosniff",
-                "Content-Disposition": "inline",
-            },
-        )
+        return asset_response(content, asset.media_type)
 
     @app.post(
         "/api/brand-systems/{brand_id}/assets/{asset_id}/favicon-sets",
@@ -1691,84 +1434,6 @@ def create_app(
             except InvalidArchive:
                 raise HTTPException(status_code=422, detail="Archive is invalid.") from None
 
-    @app.post(
-        "/api/brand-systems/{brand_id}/generation-runs",
-        response_model=GenerationRun,
-        status_code=201,
-        tags=["living brand generation"],
-    )
-    async def start_generation_run(
-        brand_id: UUID, payload: StartGenerationRequest, request: Request
-    ) -> GenerationRun:
-        workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
-        orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
-        draft = await run_in_threadpool(workspaces.get, brand_id)
-        if draft is None:
-            raise HTTPException(status_code=404, detail="Brand system not found.")
-        try:
-            return await run_in_threadpool(
-                partial(
-                    orchestrator.start,
-                    draft,
-                    target_section_id=payload.target_section_id,
-                    model=request.app.state.settings.primary_model,
-                    fallback_model=request.app.state.settings.fallback_model,
-                )
-            )
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Unknown generation section.") from None
-
-    @app.get(
-        "/api/generation-runs/{run_id}",
-        response_model=GenerationRun,
-        tags=["living brand generation"],
-    )
-    async def get_generation_run(run_id: UUID, request: Request) -> GenerationRun:
-        runs = cast(SQLiteGenerationRepository, request.app.state.generation_repository)
-        run = await run_in_threadpool(runs.get, run_id)
-        if run is None:
-            raise HTTPException(status_code=404, detail="Generation run not found.")
-        return run
-
-    @app.post(
-        "/api/generation-runs/{run_id}/resume",
-        response_model=GenerationRun,
-        tags=["living brand generation"],
-    )
-    async def resume_generation_run(run_id: UUID, request: Request) -> GenerationRun:
-        orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
-        completer = cast(Completer | None, request.app.state.generation_completer)
-        if completer is None:
-            raise HTTPException(status_code=503, detail="Generation provider unavailable.")
-        try:
-            return await orchestrator.resume(run_id, completer=completer)
-        except GenerationRunNotFound:
-            raise HTTPException(status_code=404, detail="Generation run not found.") from None
-
-    @app.post(
-        "/api/generation-runs/{run_id}/pause",
-        response_model=GenerationRun,
-        tags=["living brand generation"],
-    )
-    async def pause_generation_run(run_id: UUID, request: Request) -> GenerationRun:
-        return await control_generation_run(run_id, request, "pause")
-
-    @app.post(
-        "/api/generation-runs/{run_id}/cancel",
-        response_model=GenerationRun,
-        tags=["living brand generation"],
-    )
-    async def cancel_generation_run(run_id: UUID, request: Request) -> GenerationRun:
-        return await control_generation_run(run_id, request, "cancel")
-
-    async def control_generation_run(run_id: UUID, request: Request, command: str) -> GenerationRun:
-        orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
-        try:
-            operation = orchestrator.pause if command == "pause" else orchestrator.cancel
-            return await run_in_threadpool(operation, run_id)
-        except GenerationRunNotFound:
-            raise HTTPException(status_code=404, detail="Generation run not found.") from None
-
     @app.get(
         "/api/brand-systems/{brand_id}/assets/{sha}",
         tags=["living brand assets"],
@@ -1787,7 +1452,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Asset not found.")
         try:
             content = await run_in_threadpool(asset_store.read, asset)
-            return Response(content, media_type=asset.media_type)
+            return asset_response(content, asset.media_type)
         except (AssetMissing, ValueError):
             raise HTTPException(status_code=404, detail="Asset file missing or invalid.") from None
         except AssetChanged:
@@ -1856,36 +1521,6 @@ def create_app(
             headers={
                 "Content-Disposition": _content_disposition(f"{draft.brand_name}-brand-kit.zip")
             },
-        )
-
-    @app.get(
-        "/api/generation-runs/{run_id}/stream",
-        tags=["living brand generation"],
-    )
-    async def stream_generation_run(run_id: UUID, request: Request) -> StreamingResponse:
-        orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
-        try:
-            queue = await run_in_threadpool(orchestrator.subscribe, run_id)
-        except GenerationRunNotFound:
-            raise HTTPException(status_code=404, detail="Generation run not found.") from None
-
-        async def event_generator() -> AsyncIterator[str]:
-            try:
-                while True:
-                    try:
-                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                        yield f"data: {json.dumps(event)}\n\n"
-                        if event.get("status") in {"completed", "cancelled", "failed"}:
-                            break
-                    except TimeoutError:
-                        yield ": keep-alive\n\n"
-            finally:
-                orchestrator.unsubscribe(run_id, queue)
-
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache"},
         )
 
     @app.post(
@@ -2064,9 +1699,9 @@ def create_app(
     )
     async def check_copy_compliance(
         brand_id: UUID,
-        payload: dict[str, object],
+        payload: CopyCheckRequest,
         request: Request,
-    ) -> dict[str, object]:
+    ) -> CopyCheckReport:
         workspaces = cast(
             SQLiteBrandSystemRepository, request.app.state.brand_system_repository
         )
@@ -2074,11 +1709,7 @@ def create_app(
         if draft is None:
             raise HTTPException(status_code=404, detail="Workspace not found.")
 
-        copy_text = str(payload.get("copy_text", ""))
-        if not copy_text:
-            raise HTTPException(status_code=422, detail="copy_text is required.")
-        report = check_copy_against_brand_rules(copy_text, draft)
-        return report.model_dump(mode="json")
+        return check_copy_against_brand_rules(payload.copy_text, draft)
 
     @app.get(
         "/api/brand-systems/{brand_id}/token-collisions",

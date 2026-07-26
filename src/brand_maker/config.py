@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         description="OpenRouter bearer token. Never log or serialize this value.",
     )
     primary_model: str = Field(
-        "poolside/laguna-s-2.1:free",
+        "google/gemini-3.5-flash-lite",
         min_length=1,
         validation_alias="BRAND_MAKER_PRIMARY_MODEL",
     )
@@ -53,4 +53,12 @@ class Settings(BaseSettings):
         Path(".brand-maker/brands.db"),
         validation_alias="BRAND_MAKER_DATABASE_PATH",
         description="Local SQLite file containing immutable generated brand kits.",
+    )
+    asset_source_roots: list[Path] = Field(
+        default_factory=list,
+        validation_alias="BRAND_MAKER_ASSET_SOURCE_ROOTS",
+        description=(
+            "Directories the path-based asset registration API may read. "
+            "Defaults to the database directory when unset."
+        ),
     )
