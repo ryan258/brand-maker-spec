@@ -192,6 +192,10 @@ def _safe_zip_filename(name: str) -> str:
 
 def _asset_source_is_allowed(source: Path, settings: Settings) -> bool:
     candidate = source.expanduser().resolve()
+    database = settings.database_path.expanduser().resolve()
+    # ponytail: name prefix covers the database plus every SQLite sidecar (-wal, -shm, -journal)
+    if candidate.parent == database.parent and candidate.name.startswith(database.name):
+        return False
     configured_roots = settings.asset_source_roots or [settings.database_path.parent]
     return any(candidate.is_relative_to(root.expanduser().resolve()) for root in configured_roots)
 

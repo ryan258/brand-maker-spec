@@ -23,6 +23,16 @@ def test_compliance_page_and_deterministic_api_are_accessible_and_labeled(
     with TestClient(create_app(settings=settings, pipeline=UnusedPipeline())) as api:
         page = api.get("/compliance")
         script = api.get("/assets/compliance.js")
+        favicon = api.get("/favicon.svg")
+        empty_rules_result = api.post(
+            "/api/compliance/artifact-evaluations",
+            json={
+                "artifact": {"name": "Empty Card", "content": "An unconstrained launch card"},
+                "brand_version": "1.0.0",
+                "amendment_revision": 0,
+                "rules": [],
+            },
+        )
         result = api.post(
             "/api/compliance/artifact-evaluations",
             json={
@@ -80,11 +90,17 @@ def test_compliance_page_and_deterministic_api_are_accessible_and_labeled(
         )
 
     assert page.status_code == 200
+    assert favicon.headers["cache-control"] == "no-cache"
+    assert favicon.headers["x-content-type-options"] == "nosniff"
     assert 'role="status"' in page.text
     assert "Exceptions and evidence" in page.text
     assert 'id="brand-id"' in page.text
     assert "/compliance-rules`" in script.text
     assert 'parameter:"280"' not in script.text
+    assert empty_rules_result.status_code == 201
+    assert empty_rules_result.json()["findings"] == []
+    assert empty_rules_result.json()["rule_ids"] == []
+    assert "nothing was checked" in script.text
     assert result.status_code == 201
     assert result.json()["findings"][0]["evaluation_type"] == "deterministic"
     assert result.json()["findings"][0]["status"] == "fail"

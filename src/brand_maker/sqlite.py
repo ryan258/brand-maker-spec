@@ -10,10 +10,9 @@ def initialize_database(path: Path, schema: str) -> None:
     """Install one schema and enable settings suited to concurrent local tabs."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, timeout=5.0)
+    connection = connect_database(path)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
         connection.executescript(schema)
         connection.commit()
     finally:
@@ -23,6 +22,10 @@ def initialize_database(path: Path, schema: str) -> None:
 def connect_database(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(path, timeout=5.0)
     connection.execute("PRAGMA foreign_keys=ON")
+    # ponytail: NORMAL only keeps its durability guarantee under WAL. If WAL did not stick
+    # (network mount, read-only dir), leave SQLite's FULL default rather than risk losing commits.
+    if connection.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
+        connection.execute("PRAGMA synchronous=NORMAL")
     return connection
 
 

@@ -76,7 +76,11 @@ class BrandPipeline:
                     brand_context=brand_context,
                 )
             except ModelUnavailable:
-                if not failover_used and model == self._primary_model:
+                if (
+                    not failover_used
+                    and model == self._primary_model
+                    and self._fallback_model != self._primary_model
+                ):
                     model = self._fallback_model
                     failover_used = True
                     continue

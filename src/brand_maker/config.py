@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         validation_alias="BRAND_MAKER_PRIMARY_MODEL",
     )
     fallback_model: str = Field(
-        "anthropic/claude-sonnet-4.5",
+        "google/gemini-2.5-flash",
         min_length=1,
         validation_alias="BRAND_MAKER_FALLBACK_MODEL",
     )

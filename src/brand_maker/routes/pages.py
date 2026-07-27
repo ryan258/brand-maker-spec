@@ -142,7 +142,7 @@ async def redoc_docs(request: Request) -> HTMLResponse:
 
 @router.get("/favicon.svg", include_in_schema=False)
 async def favicon() -> Response:
-    return Response(FAVICON, media_type="image/svg+xml")
+    return static_response(FAVICON, "image/svg+xml")
 
 
 @router.get("/health", tags=["operations"])

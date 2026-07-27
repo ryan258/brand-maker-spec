@@ -2,8 +2,7 @@
 
 import json
 import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -34,10 +33,8 @@ class SQLiteComplianceRepository:
         self._path = path
         initialize_database(path, SCHEMA)
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        with database_connection(self._path) as connection:
-            yield connection
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return database_connection(self._path)
 
     def register_artifact(self, artifact: ArtifactInput) -> ArtifactRevision:
         with self._connect() as connection:

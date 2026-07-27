@@ -15,7 +15,7 @@ def test_settings_use_current_model_defaults() -> None:
     settings = Settings(_env_file=None, openrouter_api_key="test-key")
 
     assert settings.primary_model == "google/gemini-3.5-flash-lite"
-    assert settings.fallback_model == "anthropic/claude-sonnet-4.5"
+    assert settings.fallback_model == "google/gemini-2.5-flash"
     assert settings.judge_model == "anthropic/claude-sonnet-4.5"
     assert settings.request_timeout_seconds == 45
     assert settings.database_path == Path(".brand-maker/brands.db")

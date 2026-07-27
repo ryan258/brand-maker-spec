@@ -196,3 +196,14 @@ async def test_build_retries_when_model_changes_requested_brand_name() -> None:
 
     assert response.status == "ok"
     assert len(generator.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_build_skips_failover_when_primary_equals_fallback() -> None:
+    generator = ScriptedGenerator([ModelUnavailable("down")])
+    pipe = BrandPipeline(generator=generator, primary_model=PRIMARY, fallback_model=PRIMARY)
+
+    response = await pipe.build("Floogle")
+
+    assert response == BrandResponse(status="error", message="Model provider unavailable.")
+    assert generator.calls == [("Floogle", PRIMARY, False)]

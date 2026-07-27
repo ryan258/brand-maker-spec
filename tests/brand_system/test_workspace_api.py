@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -481,6 +482,35 @@ def test_asset_upload_stores_managed_file_and_bumps_revision(tmp_path: Path) -> 
     assert asset["source_path"] is None  # managed copy carries no host path
     assert stale.status_code == 409  # expected_revision is now 2, not 1
     assert rejected.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "name", ["brands.db", "brands.db-wal", "brands.db-shm", "brands.db-journal"]
+)
+def test_asset_registration_rejects_database_file_path(tmp_path: Path, name: str) -> None:
+    test_client, _ = client(tmp_path)
+    db_file = tmp_path / name
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        res = api.post(
+            f"/api/brand-systems/{brand_id}/assets",
+            json={
+                "id": "asset.db.file",
+                "name": "Database File",
+                "media_type": "application/octet-stream",
+                "source_path": str(db_file),
+                "storage": "managed",
+                "required": False,
+                "expected_revision": 1,
+            },
+        )
+
+    assert res.status_code == 422
+    assert res.json()["detail"] == "Asset source path is not allowed."
 
 
 def test_section_patch_persists_manually_authored_rules_tokens_examples_patterns(

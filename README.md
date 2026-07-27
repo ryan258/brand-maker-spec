@@ -110,7 +110,7 @@ service does not expose provider payloads, credentials, or partial model output.
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | Yes | — |
 | `BRAND_MAKER_PRIMARY_MODEL` | No | `google/gemini-3.5-flash-lite` |
-| `BRAND_MAKER_FALLBACK_MODEL` | No | `anthropic/claude-sonnet-4.5` |
+| `BRAND_MAKER_FALLBACK_MODEL` | No | `google/gemini-2.5-flash` |
 | `BRAND_MAKER_JUDGE_MODEL` | No | `anthropic/claude-sonnet-4.5` |
 | `BRAND_MAKER_REQUEST_TIMEOUT_SECONDS` | No | `45` |
 | `BRAND_MAKER_DATABASE_PATH` | No | `.brand-maker/brands.db` |

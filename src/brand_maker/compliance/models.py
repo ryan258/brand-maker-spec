@@ -68,7 +68,7 @@ class ArtifactEvaluation(ContractModel):
 
 class EvaluateArtifactRequest(ContractModel):
     artifact: ArtifactInput
-    rules: list[DeterministicRule] = Field(..., min_length=1, max_length=1_000)
+    rules: list[DeterministicRule] = Field(default_factory=list, max_length=1_000)
     brand_version: str = Field(..., min_length=1, max_length=100)
     amendment_revision: int = Field(0, ge=0)
 
