@@ -8,6 +8,7 @@ import pytest
 from brand_maker.brand_system.models import LocalOwner, WorkingDraft
 from brand_maker.brand_system.repository import (
     NothingToRedo,
+    NothingToUndo,
     SQLiteBrandSystemRepository,
     StaleDraftRevision,
 )
@@ -254,3 +255,41 @@ def test_living_brand_tables_do_not_modify_legacy_saved_brands(tmp_path: Path) -
     SQLiteBrandSystemRepository(path).create(workspace)
 
     assert SQLiteBrandRepository(path).get(saved.id) == saved
+
+
+def test_undo_beyond_pruned_depth_returns_nothing_to_undo(tmp_path: Path) -> None:
+    store = SQLiteBrandSystemRepository(tmp_path / "brands.db")
+    current = draft("d795ebf9-8f54-44a2-85cd-e73faacb7008", "Brand 0")
+    store.create(current)
+    for i in range(1, 25):
+        updated = current.model_copy(update={"brand_name": f"Brand {i}", "revision": i + 1})
+        store.update(updated, expected_revision=i, action=f"workspace.step.{i}")
+        current = updated
+
+    rev = current.revision
+    for _ in range(20):
+        current = store.undo(current.brand_id, expected_revision=rev)
+        rev = current.revision
+
+    with pytest.raises(NothingToUndo):
+        store.undo(current.brand_id, expected_revision=rev)
+
+    with sqlite3.connect(store.path) as connection:
+        pruned_reversible = connection.execute(
+            """
+            SELECT COUNT(*) FROM brand_system_audit_events
+            WHERE brand_id = ? AND reversible = 1
+              AND (before_json IS NULL OR after_json = '{}')
+            """,
+            (str(current.brand_id),),
+        ).fetchone()[0]
+        retained_reversible = connection.execute(
+            """
+            SELECT COUNT(*) FROM brand_system_audit_events
+            WHERE brand_id = ? AND reversible = 1
+            """,
+            (str(current.brand_id),),
+        ).fetchone()[0]
+
+    assert pruned_reversible == 0
+    assert retained_reversible == 20

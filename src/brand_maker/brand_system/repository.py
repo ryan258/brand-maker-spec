@@ -71,6 +71,9 @@ WHERE NOT EXISTS (
     SELECT 1 FROM brand_system_audit_events AS event
     WHERE event.brand_id = workspace.brand_id
 );
+UPDATE brand_system_audit_events
+SET reversible = 0
+WHERE reversible = 1 AND (before_json IS NULL OR after_json = '{}');
 """
 
 
@@ -108,6 +111,44 @@ def _changed_fields(before: WorkingDraft, after: WorkingDraft) -> list[str]:
     previous.pop("revision", None)
     current.pop("revision", None)
     return sorted(key for key in previous | current if previous.get(key) != current.get(key))
+
+
+MAX_UNDO_DEPTH = 20
+
+
+def _prune_audit_snapshots(
+    connection: sqlite3.Connection, brand_id: str, max_undo_depth: int = MAX_UNDO_DEPTH
+) -> None:
+    """Keep before_json/after_json snapshots only for the top N reversible events per brand."""
+    connection.execute(
+        """
+        UPDATE brand_system_audit_events
+        SET before_json = NULL, after_json = '{}'
+        WHERE brand_id = ? AND reversible = 0
+          AND (before_json IS NOT NULL OR after_json != '{}')
+        """,
+        (brand_id,),
+    )
+    cutoff = connection.execute(
+        """
+        SELECT rowid
+        FROM brand_system_audit_events
+        WHERE brand_id = ? AND reversible = 1
+        ORDER BY rowid DESC
+        LIMIT 1 OFFSET ?
+        """,
+        (brand_id, max_undo_depth),
+    ).fetchone()
+    if cutoff is None:
+        return
+    connection.execute(
+        """
+        UPDATE brand_system_audit_events
+        SET before_json = NULL, after_json = '{}', reversible = 0
+        WHERE brand_id = ? AND reversible = 1 AND rowid <= ?
+        """,
+        (brand_id, cutoff[0]),
+    )
 
 
 class SQLiteBrandSystemRepository:
@@ -332,6 +373,7 @@ class SQLiteBrandSystemRepository:
                     1,
                 ),
             )
+            _prune_audit_snapshots(connection, str(draft.brand_id))
         return draft
 
     def list_audit(
@@ -505,6 +547,7 @@ class SQLiteBrandSystemRepository:
                     """,
                     (now, str(event_id), event_row[0]),
                 )
+            _prune_audit_snapshots(connection, str(brand_id))
         return restored
 
     def soft_delete(
@@ -656,6 +699,7 @@ class SQLiteBrandSystemRepository:
                     1,
                 ),
             )
+            _prune_audit_snapshots(connection, str(restored.brand_id))
         return restored
 
     def list_trash(self, *, page: int, page_size: int) -> tuple[list[TrashRecord], int]:
@@ -738,7 +782,8 @@ class SQLiteBrandSystemRepository:
             )
             rows = connection.execute(
                 """
-                SELECT workspace.draft_json
+                SELECT workspace.brand_id, workspace.brand_name, workspace.revision,
+                       workspace.status, json_extract(workspace.draft_json, '$.sections')
                 FROM brand_system_workspaces AS workspace
                 WHERE NOT EXISTS (
                     SELECT 1 FROM brand_system_trash AS trash
@@ -749,6 +794,22 @@ class SQLiteBrandSystemRepository:
                 """,
                 (page_size, offset),
             ).fetchall()
-        return [
-            WorkspaceSummary.from_draft(WorkingDraft.model_validate_json(row[0])) for row in rows
-        ], total
+
+        summaries: list[WorkspaceSummary] = []
+        for row in rows:
+            sections = json.loads(row[4]) if row[4] else []
+            section_count = len(sections)
+            complete_section_count = sum(
+                s.get("status") in {"reviewed", "approved"} for s in sections if isinstance(s, dict)
+            )
+            summaries.append(
+                WorkspaceSummary(
+                    brand_id=UUID(row[0]),
+                    brand_name=row[1],
+                    revision=row[2],
+                    status=row[3],
+                    section_count=section_count,
+                    complete_section_count=complete_section_count,
+                )
+            )
+        return summaries, total
