@@ -9,6 +9,7 @@ a quick entry path into the same durable workspace.
 The approved product direction and implementation sequence live in
 [`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md) and
 [`docs/specs/personal-brand-os-implementation-plan.md`](docs/specs/personal-brand-os-implementation-plan.md).
+For a browser walkthrough, see [`docs/happy-path.md`](docs/happy-path.md).
 
 ## Quick start
 
@@ -47,8 +48,8 @@ The living-brand workflow is:
    kit, then add whatever founding context is already known. The structured brief saves
    incrementally and offers starter answers to reduce typing.
 2. Edit sections manually or generate a complete/selected starting point. Generation
-   obeys the founding brief; **Update to match brief** regenerates unlocked sections to
-   obey the current brief while preserving locked ones.
+   obeys the founding brief; **Generate or refresh complete draft** regenerates
+   unlocked sections from the current brief while preserving locked ones.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
    assets; preview its brand-token dark mode, follow the active table of contents,
@@ -112,6 +113,7 @@ service does not expose provider payloads, credentials, or partial model output.
 | `BRAND_MAKER_PRIMARY_MODEL` | No | `google/gemini-3.5-flash-lite` |
 | `BRAND_MAKER_FALLBACK_MODEL` | No | `google/gemini-2.5-flash` |
 | `BRAND_MAKER_JUDGE_MODEL` | No | `anthropic/claude-sonnet-4.5` |
+| `BRAND_MAKER_IMAGE_MODEL` | No | `google/gemini-2.5-flash-image-preview` |
 | `BRAND_MAKER_REQUEST_TIMEOUT_SECONDS` | No | `45` |
 | `BRAND_MAKER_DATABASE_PATH` | No | `.brand-maker/brands.db` |
 | `BRAND_MAKER_ASSET_SOURCE_ROOTS` | No | Database directory only |
@@ -125,8 +127,10 @@ checksum-bound and can restore their managed assets without original source path
 Legacy records are never destructively migrated. Creating a living workspace from a
 saved kit copies its content and provenance; the source kit remains unchanged.
 
-The primary, fallback, and judge defaults are defined once in `Settings` and mirrored
-here and in `.env.example`; every model remains overridable without a code change.
+The primary, fallback, judge, and image-model defaults are defined once in `Settings`
+and mirrored here and in `.env.example`; every model remains overridable without a
+code change. Keep the primary and fallback models distinct if you want provider
+failover to select a second model.
 
 ## Local security boundary
 
@@ -167,6 +171,8 @@ and `2` for invalid input or evaluation failure.
 
 ## Architecture
 
+- `routes/`: modular API endpoints (`workspaces`, `assets`, `publication`, `exports`,
+  `generation`, `compliance`, and `pages`).
 - `brand_system/`: canonical workspaces, validation, assets, publication, and amendments.
 - `generation/`: versioned section prompts and resumable generation runs.
 - `publishing/`: audience projections, Markdown/developer/archive/PDF exports.
@@ -175,12 +181,11 @@ and `2` for invalid input or evaluation failure.
 - `openrouter.py`: bounded HTTP adapter and provider-envelope validation.
 - `json_extract.py`: defensive extraction of object-shaped model output.
 - `pipeline.py`: retry, refusal, failover, and terminal-outcome state machine.
-- `app.py`: lifespan-owned HTTP client and FastAPI routes.
+- `app.py`: FastAPI application factory, lifespan management, and router orchestration.
 - `web.py`: dependency-free homepage, favicon, and documentation navigation.
-- `ui.py`: safe browser-side generation and result rendering behavior.
 - `storage.py`: parameterized SQLite persistence and bounded pagination.
 - `library_web.py`: collection and full-detail HTML shells.
-- `static/`: shared browser scripts and responsive styles for library, workshop, and compliance pages.
+- `static/`: shared browser scripts and responsive styles for brand bible, library, workshop, and compliance pages (`brand-bible.css`, `library.css`, `workshop.css`, `app.js`, `workshop.js`).
 - `workshop_web.py`: living-brand workspace HTML shells.
 - `compliance_web.py`: local compliance workflow shell.
 - `evaluation.py`: deterministic checks and the exact LLM judge rubric.

@@ -7,10 +7,10 @@ This document provides a clear, step-by-step guide to using **Brand Maker** from
 ## Quick Map of the Web Application
 
 ```
-http://localhost:8000/
+http://127.0.0.1:8000/
  ├── /                         --> Home Page (Create Workspace & View Workspaces)
  ├── /brand-systems/<brand_id> --> Brand Workshop (Brief, AI Generation, Section Editor, Assets)
- └── /brand-systems/<brand_id>/bible --> Brand Bible (Published system view, Font picker, Export)
+ └── /brand-systems/<brand_id>/bible --> Brand Bible (current draft view, Font picker, Export)
 ```
 
 ---
@@ -24,14 +24,14 @@ http://localhost:8000/
    ```
 3. Open your browser and navigate to:
    ```
-   http://localhost:8000
+   http://127.0.0.1:8000
    ```
 
 ---
 
 ## Step 2: Create a Brand Workspace
 
-On the main page (`http://localhost:8000/`):
+On the main page (`http://127.0.0.1:8000/`):
 
 1. **What are you starting with?**: Choose your entry path (*Raw idea*, *Named concept*, or *Existing project*).
 2. **How should AI help?**: Select your preferred AI mode (*Advisor*, *Copilot*, or *Autonomous strategist*).
@@ -60,8 +60,8 @@ At the top of the **Brand Workshop** page (`/brand-systems/<brand_id>`):
 
 Scroll down past the brief to find the **Generate a starting point** card.
 
-### Option A: Fill Every Section Automatically
-* Click the **`Generate complete draft`** button.
+### Option A: Fill or Refresh Every Unlocked Section
+* Click the **`Generate or refresh complete draft`** button.
 * The AI generation engine will process each section in dependency order (Core Identity → Strategy → Colors → Typography → Voice & Tone → etc.), using your founding brief and any existing filled sections as ground truth context.
 * You can watch the progress log in real time below the buttons.
 
@@ -72,9 +72,12 @@ Scroll down past the brief to find the **Generate a starting point** card.
 4. The AI will synthesize only that specific section based on your brief and any previously completed sections.
 
 ### Option C: Re-align an Existing Brand to the Brief
-* Click the **`Update to match brief`** button after editing your founding brief.
-* Every **unlocked** section is regenerated so its objective, audience, category, differentiators, constraints, concept, and stage obey the current brief. Locked sections are preserved.
-* This replaces unlocked section content, so lock or approve anything you want to keep first.
+* Edit the founding brief, wait for its save confirmation, then click
+  **`Generate or refresh complete draft`**.
+* Every **unlocked** section is regenerated from the current brief. Locked sections
+  are preserved.
+* This replaces unlocked section content, so lock or approve anything you want to
+  keep first.
 
 ---
 
@@ -107,17 +110,18 @@ Locate the **Logos and production assets** card:
 2. **In-place Prose Editing**: Click **`Edit in place`** to make live inline edits directly on prose blocks.
 3. **Typography Customization**: Use the font pickers to select Google Fonts for headings and body text in real time.
 4. **Theme Preview**: Toggle between light and dark mode preview using **`Preview dark mode`**.
-5. **Export / Print**: Click **`Print / Export PDF`** or use your browser's print function to generate a clean PDF or printout of your brand bible.
+5. **Export / Print**: Click **`Print or save PDF`** for the browser print dialog, or
+   use **`Export`** to download a PDF, Markdown, CSS/JSON/Tailwind tokens, or the
+   brand-kit ZIP.
 
 ---
 
 ## Summary Checklist
 
-- [x] Run `uv run brand-maker` and open `http://localhost:8000`
+- [x] Run `uv run brand-maker` and open `http://127.0.0.1:8000`
 - [x] Create workspace
 - [x] Use starter buttons in Founding Brief
-- [x] Click **`Generate complete draft`** to auto-fill missing sections
-- [x] Click **`Update to match brief`** to re-align unlocked sections after editing the brief
+- [x] Click **`Generate or refresh complete draft`** to fill or refresh unlocked sections
 - [x] Review & edit sections in the Section Editor
 - [x] Generate logo & asset variants
 - [x] View and print your complete Brand Bible

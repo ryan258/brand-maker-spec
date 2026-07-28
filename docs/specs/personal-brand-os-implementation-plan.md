@@ -17,7 +17,14 @@ changes remain untouched until they can be reconciled deliberately.
 - Complete: Task 3.1 (unified non-parody quick start with compatibility preservation).
 - Complete: Task 3.2 (accessible entry-path, assistance, and research choices).
 - Complete: Task 3.3 (incremental structured brief and privacy-visible evidence intake).
-- Next: Task 3.4, explicit bounded project and document import.
+- Complete in the current local workflow: resumable streaming generation, field
+  regeneration and posture variants; logo generation, derivatives, font validation,
+  and contrast checks; exact-revision compliance; browser governance/recovery flows;
+  and Markdown, PDF, archive, and developer-token exports.
+- Next: Task 3.4, explicit bounded project and document import. Later phases remain
+  partially complete where their acceptance criteria include unshipped items such as
+  research import, scheduled checks, SDK/CLI sync, webhooks, analytics, multilingual
+  projections, and competitor reports.
 
 ## Architecture Decisions
 
@@ -485,6 +492,11 @@ and operational commands match the implemented product; parody is historical onl
 **Verify:** Documentation links/examples and OpenAPI tests.
 
 **Files:** README, specs/ADRs, API docs tests. **Dependencies:** prior phases. **Scope:** M.
+
+**Current status:** In progress. The README, environment template, walkthrough, and
+product/implementation specifications are aligned with the shipped local workflow as
+of 2026-07-27. Interactive endpoint documentation is available from the running app
+at `/docs`; remaining roadmap APIs are not documented as shipped.
 
 ### Task 12.2: Complete end-to-end release verification
 

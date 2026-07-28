@@ -19,8 +19,8 @@
 - Made section generation obey the founding brief: the brief's objective, audience,
   category, differentiators, constraints, existing equity, and success measures, plus
   the workspace concept and maturity stage, are supplied to every section-generation
-  request. Added an **Update to match brief** control that regenerates unlocked
-  sections to obey the current brief while preserving locked sections.
+  request. The complete-draft refresh regenerates unlocked sections from the current
+  brief while preserving locked sections.
 - Added optional `brand_context` input to quick-start generations and API requests (`POST /api/brands`), allowing initial brand notes (up to 50,000 characters) to be passed safely into quick-start generation and automatically populated on the living workspace.
 
 - **Idea 1:** Moved AI logo generation above the section editor.
@@ -91,3 +91,11 @@
   generator; legacy quick-kit fields remain available for compatibility.
 - Replaced parody-oriented homepage, library, generation, and evaluation language with
   broad original-brand positioning.
+- Modularized application routes from monolithic `app.py` into dedicated sub-routers under `src/brand_maker/routes/` (`workspaces`, `assets`, `publication`, `exports`, `generation`, `compliance`, and `pages`).
+- Replaced Python-embedded CSS/JS string modules (`ui.py`, `workshop_ui.py`, `library_ui.py`, `compliance_ui.py`) with static asset files served at `/assets`.
+- Bounded undo audit history storage in SQLite (`MAX_UNDO_DEPTH = 20`) via `_prune_audit_snapshots` to prevent database size bloat.
+- Optimized paginated workspace list queries with SQLite `json_extract` to eliminate full JSON model deserialization overhead.
+- Ensured thread-safe queue event notifications in `GenerationOrchestrator` using `event_loop.call_soon_threadsafe`.
+- Added optimistic draft locking conflict retries (up to 3 attempts) in `_persist_generated_section` for concurrent generation runs.
+- Enforced zip entry (25 MB) and total archive (250 MB) safety limits in developer brand-kit exports and early `Content-Length` checks on file upload streams.
+- Guarded managed asset file unlinking with `is_referenced` content-hash verification to protect shared content blobs.

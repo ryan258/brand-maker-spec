@@ -2,9 +2,13 @@
 
 ## Status
 
-Proposed for implementation. This specification records the product intent confirmed
-on 2026-07-25 and supersedes parody-specific product positioning. It extends, rather
-than replaces, the canonical contracts in `living-brand-system.md`.
+Active implementation specification. This product direction was confirmed on
+2026-07-25 and supersedes parody-specific positioning. The canonical workspace,
+structured brief, evidence and decisions, readiness gates, audit/undo/redo,
+recoverable trash and backups, resumable generation, core asset tooling, exports, and
+compliance workflows are implemented. Later roadmap capabilities remain planned until
+their acceptance criteria and a usable browser or CLI path are verified. This document
+extends, rather than replaces, the canonical contracts in `living-brand-system.md`.
 
 ## Objective
 
@@ -225,12 +229,14 @@ entry paths, workspace editing, readiness, bible, compliance, and mobile layout.
 
 - `src/brand_maker/brand_system/`: canonical workspace, brief, evidence, decisions,
   readiness, assets, versioning, audit, and backup contracts.
-- `src/brand_maker/generation/`: adaptive assistance, prompts, variants, critique,
-  estimates, streaming progress, and persisted provenance.
-- `src/brand_maker/importing/`: explicit project/document/site ingestion boundaries.
-- `src/brand_maker/publishing/`: canonical and audience outputs, visual specimens,
-  design-token/component exports, SDKs, CLI packages, and webhooks.
-- `src/brand_maker/compliance/`: exact-brand evaluation and the local status center.
+- `src/brand_maker/generation/`: prompts, validated variants, streaming progress, and
+  persisted provenance. Critique and estimate capabilities remain roadmap work.
+- `src/brand_maker/publishing/`: canonical and audience outputs, Markdown/PDF/archive
+  exports, and developer token exports. SDKs, CLI sync, webhooks, and hosted APIs are
+  roadmap work.
+- `src/brand_maker/compliance/`: exact-brand deterministic and judgment-backed
+  evaluation, evidence, exceptions, and campaigns. Scheduled drift checks and a
+  status center are roadmap work.
 - `tests/`: unit, integration, contract, security, browser-shell, and export tests
   mirroring those modules.
 - `docs/specs/`: product contracts and implementation plans.
