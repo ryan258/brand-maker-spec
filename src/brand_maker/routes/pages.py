@@ -1,4 +1,4 @@
-"""HTML shell, documentation, and static-asset routes."""
+"""HTML shell, documentation, and page routes."""
 
 from typing import cast
 from uuid import UUID
@@ -13,19 +13,12 @@ from fastapi.responses import HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from brand_maker.brand_bible import render_brand_bible
-from brand_maker.brand_bible_styles import BRAND_BIBLE_CSS
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
-from brand_maker.compliance_ui import COMPLIANCE_SCRIPT
 from brand_maker.compliance_web import compliance_page
 from brand_maker.http import BROWSER_HEADERS, static_response
-from brand_maker.library_styles import LIBRARY_CSS
-from brand_maker.library_ui import LIBRARY_SCRIPT
 from brand_maker.library_web import detail_page, library_page, not_found_page
 from brand_maker.storage import SQLiteBrandRepository
-from brand_maker.ui import UI_SCRIPT
 from brand_maker.web import FAVICON, HOME_PAGE, add_home_navigation
-from brand_maker.workshop_styles import WORKSHOP_CSS
-from brand_maker.workshop_ui import WORKSHOP_SCRIPT
 from brand_maker.workshop_web import workspace_detail, workspace_index
 
 router = APIRouter()
@@ -34,41 +27,6 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root() -> HTMLResponse:
     return HTMLResponse(HOME_PAGE, headers=BROWSER_HEADERS)
-
-
-@router.get("/assets/app.js", include_in_schema=False)
-async def ui_script() -> Response:
-    return static_response(UI_SCRIPT, "text/javascript")
-
-
-@router.get("/assets/library.js", include_in_schema=False)
-async def library_script() -> Response:
-    return static_response(LIBRARY_SCRIPT, "text/javascript")
-
-
-@router.get("/assets/library.css", include_in_schema=False)
-async def library_styles() -> Response:
-    return static_response(LIBRARY_CSS, "text/css")
-
-
-@router.get("/assets/workshop.js", include_in_schema=False)
-async def workshop_script() -> Response:
-    return static_response(WORKSHOP_SCRIPT, "text/javascript")
-
-
-@router.get("/assets/workshop.css", include_in_schema=False)
-async def workshop_styles() -> Response:
-    return static_response(WORKSHOP_CSS, "text/css")
-
-
-@router.get("/assets/brand-bible.css", include_in_schema=False)
-async def brand_bible_styles() -> Response:
-    return static_response(BRAND_BIBLE_CSS, "text/css")
-
-
-@router.get("/assets/compliance.js", include_in_schema=False)
-async def compliance_script() -> Response:
-    return static_response(COMPLIANCE_SCRIPT, "text/javascript")
 
 
 @router.get("/brand-systems", response_class=HTMLResponse, include_in_schema=False)

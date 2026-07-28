@@ -157,3 +157,14 @@ def test_asset_content_is_served_sandboxed_for_thumbnails(tmp_path: Path) -> Non
     assert served.headers["content-security-policy"] == "default-src 'none'; sandbox"
     assert served.headers["x-content-type-options"] == "nosniff"
     assert missing.status_code == 404
+
+
+def test_library_stylesheet_keeps_collection_and_detail_rules(tmp_path: Path) -> None:
+    with app_client(tmp_path) as client:
+        stylesheet = client.get("/assets/library.css")
+
+    assert stylesheet.status_code == 200
+    assert len(stylesheet.content) >= 8_000
+    assert ".brand-card:hover" in stylesheet.text
+    assert ".detail-grid" in stylesheet.text
+    assert "prefers-reduced-motion" in stylesheet.text

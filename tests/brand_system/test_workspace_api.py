@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from brand_maker.app import create_app
+from brand_maker.brand_system.assets import AssetChanged
 from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
 from brand_maker.config import Settings
 from brand_maker.models import BrandKit, BrandResponse
@@ -484,6 +485,109 @@ def test_asset_upload_stores_managed_file_and_bumps_revision(tmp_path: Path) -> 
     assert rejected.status_code == 422
 
 
+def test_asset_upload_restores_form_defaults_filename_mime_and_size_limit(
+    tmp_path: Path,
+) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Primary logo"},
+            files={"file": ("logo.png", b"small-png", None)},
+        )
+        api.app.state.asset_store._max_bytes = 4
+        api.app.state.asset_store.max_bytes = 4
+        oversized = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 2, "name": "Too large"},
+            files={"file": ("large.png", b"12345", "image/png")},
+        )
+        invalid_revision = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 0, "name": "Invalid"},
+            files={"file": ("logo.png", b"png", "image/png")},
+        )
+
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["assets"][0]["media_type"] == "image/png"
+    assert uploaded.json()["assets"][0]["required"] is True
+    assert oversized.status_code == 413
+    assert invalid_revision.status_code == 422
+
+
+def test_asset_routes_preserve_integrity_error_statuses(tmp_path: Path, monkeypatch) -> None:
+    test_client, _ = client(tmp_path)
+    source = tmp_path / "linked.png"
+    source.write_bytes(b"png")
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        asset_store = api.app.state.asset_store
+
+        def changed(*args, **kwargs):
+            raise AssetChanged("changed")
+
+        monkeypatch.setattr(asset_store, "register_linked", changed)
+        rejected = api.post(
+            f"/api/brand-systems/{brand_id}/assets",
+            json={
+                "id": "asset.linked",
+                "name": "Linked",
+                "media_type": "image/png",
+                "source_path": str(source),
+                "storage": "linked",
+                "required": False,
+                "expected_revision": 1,
+            },
+        )
+        monkeypatch.undo()
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Managed", "required": "false"},
+            files={"file": ("logo.png", b"png", "image/png")},
+        ).json()["assets"][0]
+        monkeypatch.setattr(asset_store, "read", changed)
+        tampered = api.get(f"/api/brand-systems/{brand_id}/assets/{uploaded['id']}/content")
+
+    assert rejected.status_code == 422
+    assert tampered.status_code == 409
+    assert tampered.json() == {"detail": "Asset integrity breach."}
+
+
+def test_asset_upload_maps_concurrent_update_and_discards_blob(tmp_path: Path, monkeypatch) -> None:
+    test_client, _ = client(tmp_path)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        workspaces = api.app.state.brand_system_repository
+
+        def stale(*args, **kwargs):
+            from brand_maker.brand_system.repository import StaleDraftRevision
+
+            raise StaleDraftRevision
+
+        monkeypatch.setattr(workspaces, "update", stale)
+        response = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Concurrent"},
+            files={"file": ("logo.png", b"png", "image/png")},
+        )
+
+    assert response.status_code == 409
+    assert [path for path in (tmp_path / "assets").rglob("*") if path.is_file()] == []
+
+
 @pytest.mark.parametrize(
     "name", ["brands.db", "brands.db-wal", "brands.db-shm", "brands.db-journal"]
 )
@@ -625,6 +729,15 @@ def test_logo_generation_returns_503_when_image_client_unconfigured(tmp_path: Pa
     assert response.status_code == 503
 
 
+def test_production_app_configures_default_image_client(tmp_path: Path) -> None:
+    path = tmp_path / "brands.db"
+    settings = Settings(_env_file=None, openrouter_api_key="test-key", database_path=path)
+    app = create_app(settings=settings)
+
+    with TestClient(app):
+        assert app.state.image_client is not None
+
+
 def test_logo_generation_maps_model_refusal_to_422(tmp_path: Path) -> None:
     test_client, _ = client(tmp_path, image_client=FakeImageClient(refuse=True))
 
@@ -715,6 +828,32 @@ def test_ai_logo_variants_use_selected_source_reference(tmp_path: Path) -> None:
     ]
     assert len(fake.references) == 4
     assert all(reference == (logo_png(), "image/png") for reference in fake.references)
+
+
+def test_ai_logo_variants_reject_non_raster_source_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    fake = FakeImageClient()
+    test_client, _ = client(tmp_path, image_client=fake)
+
+    with test_client as api:
+        brand_id = api.post(
+            "/api/brand-systems",
+            json={"brand_name": "Northstar", "owner_name": "Ryan"},
+        ).json()["brand_id"]
+        uploaded = api.post(
+            f"/api/brand-systems/{brand_id}/asset-uploads",
+            data={"expected_revision": 1, "name": "Reference document"},
+            files={"file": ("reference.pdf", b"%PDF-1.4", "application/pdf")},
+        ).json()
+        source_id = uploaded["assets"][0]["id"]
+        response = api.post(
+            f"/api/brand-systems/{brand_id}/assets/{source_id}/logo-variant-sets",
+            json={"expected_revision": 2},
+        )
+
+    assert response.status_code == 422
+    assert fake.references == []
 
 
 def test_logo_derivatives_reject_unknown_stale_and_non_raster_sources(tmp_path: Path) -> None:

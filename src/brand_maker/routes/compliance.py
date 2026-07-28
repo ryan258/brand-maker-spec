@@ -7,14 +7,23 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from brand_maker.brand_system.assets import AssetStore
 from brand_maker.brand_system.publication import SQLitePublicationRepository
+from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
 from brand_maker.compliance.campaigns import (
     CampaignResult,
     CampaignService,
     CreateCampaignRequest,
 )
-from brand_maker.compliance.copy_checker import deterministic_copy_rules
-from brand_maker.compliance.deterministic import evaluate_artifact
+from brand_maker.compliance.copy_checker import (
+    check_copy_against_brand_rules,
+    deterministic_copy_rules,
+)
+from brand_maker.compliance.deterministic import (
+    audit_token_collisions,
+    audit_token_contrast_pairs,
+    evaluate_artifact,
+)
 from brand_maker.compliance.exceptions import (
     ComplianceException,
     ExceptionLedger,
@@ -30,12 +39,111 @@ from brand_maker.compliance.models import (
     ArtifactEvaluation,
     ArtifactInput,
     ArtifactRevision,
+    CopyCheckReport,
+    CopyCheckRequest,
     DeterministicRule,
     EvaluateArtifactRequest,
 )
 from brand_maker.compliance.repository import SQLiteComplianceRepository
+from brand_maker.logo_derivatives import RASTER_MEDIA_TYPES, check_logo_contrast_against_backgrounds
 
 router = APIRouter()
+
+
+@router.post(
+    "/api/brand-systems/{brand_id}/compliance/check-copy",
+    response_model=CopyCheckReport,
+    tags=["brand compliance"],
+)
+async def check_copy_compliance(
+    brand_id: UUID,
+    payload: CopyCheckRequest,
+    request: Request,
+) -> CopyCheckReport:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    return check_copy_against_brand_rules(payload.copy_text, draft)
+
+
+@router.get(
+    "/api/brand-systems/{brand_id}/token-collisions",
+    tags=["brand compliance"],
+)
+async def get_token_collisions(
+    brand_id: UUID,
+    request: Request,
+) -> dict[str, object]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    findings = audit_token_collisions(draft.sections)
+    return {"collisions": [f.model_dump(mode="json") for f in findings]}
+
+
+@router.get(
+    "/api/brand-systems/{brand_id}/wcag-audit",
+    tags=["brand compliance"],
+)
+async def get_wcag_token_audit(
+    brand_id: UUID,
+    request: Request,
+) -> dict[str, object]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    findings = audit_token_contrast_pairs(draft.sections)
+    return {"findings": [f.model_dump(mode="json") for f in findings]}
+
+
+@router.get(
+    "/api/brand-systems/{brand_id}/logo-contrast-check",
+    tags=["brand compliance"],
+)
+async def check_logo_contrast_route(
+    brand_id: UUID,
+    request: Request,
+) -> dict[str, object]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    asset_store = cast(AssetStore, request.app.state.asset_store)
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+
+    logo_asset = next(
+        (
+            a
+            for a in draft.assets
+            if ("logo" in a.id or "logo" in a.name.lower())
+            and a.media_type in RASTER_MEDIA_TYPES
+        ),
+        None,
+    )
+    if logo_asset is None:
+        raise HTTPException(
+            status_code=422, detail="No registered raster logo asset found in workspace."
+        )
+
+    content = await run_in_threadpool(asset_store.read, logo_asset)
+    bg_tokens: list[tuple[str, str]] = []
+    for s in draft.sections:
+        for t in s.tokens:
+            if t.value_type == "color" and isinstance(t.value, str):
+                if any(
+                    k in t.id.lower() or k in t.name.lower()
+                    for k in ["paper", "background", "surface"]
+                ):
+                    bg_tokens.append((t.name, t.value))
+    if not bg_tokens:
+        bg_tokens = [("Paper Light", "#ffffff"), ("Paper Dark", "#111827")]
+
+    results = await run_in_threadpool(
+        check_logo_contrast_against_backgrounds, content, logo_asset.media_type, bg_tokens
+    )
+    return {"results": results}
 
 
 @router.get(

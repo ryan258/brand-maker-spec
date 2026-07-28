@@ -79,6 +79,8 @@ def test_documentation_pages_link_back_home(path: str) -> None:
     assert int(response.headers["content-length"]) == len(response.content)
     assert '<a class="app-home-link" href="/"' in response.text
     assert "Back to home" in response.text
+    assert 'src="/assets/swagger-ui-bundle.js"' not in response.text
+    assert 'src="/assets/redoc.standalone.js"' not in response.text
 
 
 def test_favicon_is_available() -> None:

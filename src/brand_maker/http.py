@@ -4,7 +4,9 @@ from fastapi.responses import Response
 
 BROWSER_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self'; connect-src 'self'; base-uri 'none'; "
         "form-action 'self'; frame-ancestors 'none'"
     ),

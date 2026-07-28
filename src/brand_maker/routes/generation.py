@@ -20,7 +20,9 @@ from brand_maker.generation.orchestrator import (
     GenerationRunNotFound,
 )
 from brand_maker.generation.repository import (
+    GenerateSectionVariantsRequest,
     GenerationRun,
+    RegenerateFieldRequest,
     SQLiteGenerationRepository,
     StartGenerationRequest,
 )
@@ -143,7 +145,13 @@ async def cancel_generation_run(run_id: UUID, request: Request) -> GenerationRun
 async def stream_generation_run(run_id: UUID, request: Request) -> StreamingResponse:
     orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
     try:
-        queue = await run_in_threadpool(orchestrator.subscribe, run_id)
+        queue = await run_in_threadpool(
+            partial(
+                orchestrator.subscribe,
+                run_id,
+                event_loop=asyncio.get_running_loop(),
+            )
+        )
     except GenerationRunNotFound:
         raise HTTPException(status_code=404, detail="Generation run not found.") from None
 
@@ -165,3 +173,64 @@ async def stream_generation_run(run_id: UUID, request: Request) -> StreamingResp
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
     )
+
+
+@router.post(
+    "/api/brand-systems/{brand_id}/sections/{section_id}/fields/regenerate",
+    tags=["living brand generation"],
+)
+async def regenerate_section_field(
+    brand_id: UUID,
+    section_id: str,
+    payload: RegenerateFieldRequest,
+    request: Request,
+) -> dict[str, str]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
+    completer = cast(Completer | None, request.app.state.generation_completer)
+    if completer is None:
+        raise HTTPException(status_code=503, detail="Generation provider unavailable.")
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+
+    settings = cast(Settings, request.app.state.settings)
+    return await orchestrator.regenerate_field(
+        draft=draft,
+        section_id=section_id,
+        field_label=payload.field_label,
+        current_text=payload.current_text,
+        instruction=payload.instruction,
+        model=payload.model or settings.primary_model,
+        completer=completer,
+    )
+
+
+@router.post(
+    "/api/brand-systems/{brand_id}/sections/{section_id}/variants",
+    tags=["living brand generation"],
+)
+async def generate_section_variants(
+    brand_id: UUID,
+    section_id: str,
+    payload: GenerateSectionVariantsRequest,
+    request: Request,
+) -> dict[str, list[dict[str, object]]]:
+    workspaces = cast(SQLiteBrandSystemRepository, request.app.state.brand_system_repository)
+    orchestrator = cast(GenerationOrchestrator, request.app.state.generation_orchestrator)
+    completer = cast(Completer | None, request.app.state.generation_completer)
+    if completer is None:
+        raise HTTPException(status_code=503, detail="Generation provider unavailable.")
+    draft = await run_in_threadpool(workspaces.get, brand_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+
+    settings = cast(Settings, request.app.state.settings)
+    variants = await orchestrator.generate_section_variants(
+        draft=draft,
+        section_id=section_id,
+        postures=payload.postures,
+        model=payload.model or settings.primary_model,
+        completer=completer,
+    )
+    return {"variants": variants}
