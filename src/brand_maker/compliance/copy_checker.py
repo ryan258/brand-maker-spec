@@ -46,7 +46,7 @@ STOPWORDS = {
 
 def _extract_forbidden_terms(text: str) -> list[str]:
     terms: list[str] = []
-    # 1. Matches quoted phrases: never say "fake claims"
+    # 1. Matches quoted phrases: never say "fake claims", avoid "formal"
     quoted = re.findall(
         r"(?:never say|do not use|avoid|forbidden:?)\s+['\"]([^'\"]+)['\"]",
         text,
@@ -57,9 +57,11 @@ def _extract_forbidden_terms(text: str) -> list[str]:
         if q_clean and q_clean.lower() not in STOPWORDS:
             terms.append(q_clean)
 
-    # 2. Matches single unquoted words: never say parody
+    # 2. Matches single unquoted words: never say parody, do not use clickbait
+    # ponytail: unquoted 'avoid' captures single adverbs like 'overly' in
+    # 'Avoid overly formal language'; require quotes for 'avoid'
     unquoted = re.findall(
-        r"(?:never say|do not use|avoid|forbidden:?)\s+([a-zA-Z0-9_-]+)",
+        r"(?:never say|do not use|forbidden:?)\s+([a-zA-Z0-9_-]+)",
         text,
         re.IGNORECASE,
     )
@@ -95,100 +97,107 @@ def _derived_rule_id(base: str, index: int) -> str:
     return f"{stem}.{digest}{suffix}"
 
 
-def deterministic_copy_rules(workspace: WorkingDraft) -> list[DeterministicRule]:
-    """Project canonical copy guidance into explicit deterministic checks."""
-
-    result: list[DeterministicRule] = []
+def _deterministic_copy_rule_sources(
+    workspace: WorkingDraft,
+) -> list[tuple[DeterministicRule, str]]:
+    result: list[tuple[DeterministicRule, str]] = []
     for section in workspace.sections:
         for rule in section.rules:
             terms = _extract_forbidden_terms(f"{rule.name} {rule.description}")
             if terms:
                 result.extend(
-                    DeterministicRule(
-                        id=_derived_rule_id(rule.id, index),
-                        kind="forbidden_term",
-                        parameter=term[:1_000],
-                        message=f"Follow the published rule: {rule.name}."[:300],
+                    (
+                        DeterministicRule(
+                            id=_derived_rule_id(rule.id, index),
+                            kind="forbidden_term",
+                            parameter=term[:1_000],
+                            message=f"Follow the published rule: {rule.name}."[:300],
+                        ),
+                        rule.id,
                     )
                     for index, term in enumerate(terms, start=1)
                 )
             else:
                 result.append(
-                    DeterministicRule(
-                        id=rule.id,
-                        kind="unsupported",
-                        parameter=rule.description[:1_000],
-                        message=f"Review the published rule manually: {rule.name}."[:300],
+                    (
+                        DeterministicRule(
+                            id=rule.id,
+                            kind="unsupported",
+                            parameter=rule.description[:1_000],
+                            message=f"Review the published rule manually: {rule.name}."[:300],
+                        ),
+                        rule.id,
                     )
                 )
         for pattern in section.patterns:
+            forbidden_terms = _structured_forbidden_terms(pattern)
+            if not forbidden_terms:
+                pattern_text = f"{pattern.name} {pattern.summary} {' '.join(pattern.dont_guidance)}"
+                forbidden_terms = _extract_forbidden_terms(pattern_text)
             result.extend(
-                DeterministicRule(
-                    id=_derived_rule_id(pattern.id, index),
-                    kind="forbidden_term",
-                    parameter=term[:1_000],
-                    message=f"Use an approved alternative from {pattern.name}."[:300],
+                (
+                    DeterministicRule(
+                        id=_derived_rule_id(pattern.id, index),
+                        kind="forbidden_term",
+                        parameter=term[:1_000],
+                        message=f"Use an approved alternative from {pattern.name}."[:300],
+                    ),
+                    pattern.id,
                 )
-                for index, term in enumerate(_structured_forbidden_terms(pattern), start=1)
+                for index, term in enumerate(forbidden_terms, start=1)
             )
     return result
+
+
+def deterministic_copy_rules(workspace: WorkingDraft) -> list[DeterministicRule]:
+    """Project canonical copy guidance into explicit deterministic checks."""
+
+    return [rule for rule, _ in _deterministic_copy_rule_sources(workspace)]
 
 
 def check_copy_against_brand_rules(copy_text: str, workspace: WorkingDraft) -> CopyCheckReport:
     """Evaluate candidate text against brand rules across all sections."""
     violations: list[CopyCheckViolation] = []
+
+    rule_map: dict[str, tuple[str, Literal["advisory", "warning", "blocking"]]] = {}
     total_rules = 0
-
     for section in workspace.sections:
-        for rule in section.rules:
-            total_rules += 1
-            rule_desc = f"{rule.name} {rule.description}"
-            forbidden_terms = _extract_forbidden_terms(rule_desc)
-            for term in forbidden_terms:
-                match = re.search(rf"\b{re.escape(term)}\b", copy_text, re.IGNORECASE)
-                if match:
-                    violations.append(
-                        CopyCheckViolation(
-                            rule_id=rule.id,
-                            rule_name=rule.name,
-                            enforcement=rule.enforcement,
-                            matched_text=match.group(0),
-                            message=(
-                                f"Copy contains forbidden term '{match.group(0)}' "
-                                f"violating rule '{rule.name}'."
-                            ),
-                            suggested_correction=(
-                                f"Replace or remove '{match.group(0)}' according to brand guidance."
-                            ),
-                        )
-                    )
-                    break
+        total_rules += len(section.rules) + len(section.patterns)
+        for r in section.rules:
+            rule_map[r.id] = (r.name, r.enforcement)
+        for p in section.patterns:
+            rule_map[p.id] = (p.name, "warning")
 
-        for pattern in section.patterns:
-            total_rules += 1
-            pattern_text = f"{pattern.name} {pattern.summary} {' '.join(pattern.dont_guidance)}"
-            forbidden_terms = _structured_forbidden_terms(pattern)
-            if not forbidden_terms:
-                forbidden_terms = _extract_forbidden_terms(pattern_text)
-            for term in forbidden_terms:
-                found = re.search(rf"\b{re.escape(term)}\b", copy_text, re.IGNORECASE)
-                if found:
-                    violations.append(
-                        CopyCheckViolation(
-                            rule_id=pattern.id,
-                            rule_name=pattern.name,
-                            enforcement="warning",
-                            matched_text=found.group(0),
-                            message=(
-                                f"Copy contains discouraged phrasing '{found.group(0)}' "
-                                f"in '{pattern.name}'."
-                            ),
-                            suggested_correction="Use approved messaging alternatives.",
-                        )
-                    )
-                    break
+    rules = _deterministic_copy_rule_sources(workspace)
+    seen_rules: set[str] = set()
 
-    passed_count = max(0, total_rules - len(violations))
+    for rule, base_id in rules:
+        if rule.kind != "forbidden_term":
+            continue
+        term = rule.parameter
+        if base_id in seen_rules:
+            continue
+        match = re.search(rf"\b{re.escape(term)}\b", copy_text, re.IGNORECASE)
+        if match:
+            seen_rules.add(base_id)
+            rule_name, enforcement = rule_map.get(base_id, (rule.message, "warning"))
+            violations.append(
+                CopyCheckViolation(
+                    rule_id=rule.id,
+                    rule_name=rule_name,
+                    enforcement=enforcement,
+                    matched_text=match.group(0),
+                    message=(
+                        f"Copy contains forbidden term '{match.group(0)}' "
+                        f"violating rule '{rule_name}'."
+                    ),
+                    suggested_correction=(
+                        f"Replace or remove '{match.group(0)}' according to brand guidance."
+                    ),
+                )
+            )
+
+    passed_count = max(0, total_rules - len(seen_rules))
     has_blocking = any(v.enforcement == "blocking" for v in violations)
     has_warning = any(v.enforcement == "warning" for v in violations)
 

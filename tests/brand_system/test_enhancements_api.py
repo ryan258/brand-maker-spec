@@ -31,6 +31,14 @@ class DummyCompleter:
         self, *, messages: list[dict[str, str]], model: str, temperature: float, max_tokens: int
     ) -> str:
         import json
+
+        if "single narrative text field" in messages[0]["content"]:
+            return json.dumps(
+                {
+                    "rationale": "Made the field clearer.",
+                    "text": "Regenerated field copy.",
+                }
+            )
         return json.dumps({
             "prompt_version": PROMPT_VERSION,
             "section_id": "section.strategy",
@@ -444,8 +452,10 @@ def test_field_regeneration_route(client):
         )
         assert response.status_code == 200
         body = response.json()
-        assert "text" in body
-        assert "rationale" in body
+        assert body == {
+            "text": "Regenerated field copy.",
+            "rationale": "Made the field clearer.",
+        }
 
 
 def test_variants_generation_route(client):
@@ -465,8 +475,13 @@ def test_variants_generation_route(client):
         )
         assert response.status_code == 200
         body = response.json()
-        assert "variants" in body
-        assert len(body["variants"]) >= 1
+        assert len(body["variants"]) == 1
+        variant = body["variants"][0]
+        assert variant["posture"] == "balanced"
+        assert variant["rationale"] == "Generated valid variant."
+        assert variant["section"]["id"] == "section.strategy"
+        assert variant["section"]["blocks"][0]["text"] == "Narrative block 1."
+        assert variant["section"]["patterns"][0]["name"] == "Positioning Framework"
 
 
 @pytest.mark.parametrize(

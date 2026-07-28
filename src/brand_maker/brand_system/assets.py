@@ -4,6 +4,7 @@ import hashlib
 import os
 import stat
 import tempfile
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -140,11 +141,18 @@ class AssetStore:
             created,
         )
 
-    def discard_managed(self, asset: AssetRegistration) -> None:
-        """Remove a managed blob after a failed registration transaction."""
+    def discard_managed(
+        self,
+        asset: AssetRegistration,
+        *,
+        is_referenced: Callable[[str], bool] | None = None,
+    ) -> None:
+        """Remove a managed blob after a failed registration transaction unless referenced."""
 
         if asset.storage != "managed":
             raise ValueError("only managed assets can be discarded")
+        if is_referenced is not None and is_referenced(asset.content_hash):
+            return
         destination = self._root / asset.content_hash[:2] / asset.content_hash[2:]
         destination.unlink(missing_ok=True)
 

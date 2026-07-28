@@ -356,3 +356,38 @@ def test_early_archive_limit_check() -> None:
             kit_res = api.get(f"/api/brand-systems/{brand_id}/draft-exports/kit")
             assert kit_res.status_code == 413
             assert "250 MB" in kit_res.json()["detail"]
+
+
+def test_brand_kit_rejects_missing_required_asset() -> None:
+    with TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        db_path = root / "test.db"
+        source = root / "required-logo.png"
+        source.write_bytes(b"required logo")
+        settings = Settings(database_path=db_path, openrouter_api_key="test-key")
+        app = create_app(settings=settings)
+
+        with TestClient(app) as api:
+            brand_id = api.post(
+                "/api/brand-systems",
+                json={"brand_name": "Required Asset Brand", "owner_name": "Tester"},
+            ).json()["brand_id"]
+            registered = api.post(
+                f"/api/brand-systems/{brand_id}/assets",
+                json={
+                    "expected_revision": 1,
+                    "id": "asset.logo.required",
+                    "name": "Required logo.png",
+                    "storage": "linked",
+                    "media_type": "image/png",
+                    "source_path": str(source),
+                    "required": True,
+                },
+            )
+            assert registered.status_code == 201
+            source.unlink()
+
+            kit_res = api.get(f"/api/brand-systems/{brand_id}/draft-exports/kit")
+
+        assert kit_res.status_code == 409
+        assert "Required logo.png" in kit_res.json()["detail"]

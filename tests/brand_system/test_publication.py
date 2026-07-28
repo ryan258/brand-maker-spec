@@ -75,6 +75,35 @@ def test_publication_requires_exact_revision_approval(tmp_path: Path) -> None:
     assert response.json() == {"detail": "Current draft revision is not approved."}
 
 
+def test_publication_maps_asset_validation_failures_to_conflict(
+    tmp_path: Path, monkeypatch
+) -> None:
+    with client(tmp_path) as api:
+        draft = create_workspace(api)
+
+        def reject_asset_registration(*args, **kwargs):
+            raise ValueError("unsupported stored media type")
+
+        monkeypatch.setattr(
+            api.app.state.asset_store,
+            "prepare_publication",
+            reject_asset_registration,
+        )
+        response = api.post(
+            f"/api/brand-systems/{draft['brand_id']}/versions",
+            json={
+                "expected_revision": 1,
+                "version": "1.0.0",
+                "change_summary": "Initial publication.",
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Required publication asset is missing or changed."
+    }
+
+
 def test_empty_workspace_cannot_be_approved_as_a_complete_brand(tmp_path: Path) -> None:
     with client(tmp_path) as api:
         draft = create_workspace(api)

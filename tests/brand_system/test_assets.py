@@ -113,6 +113,21 @@ def test_asset_read_returns_only_the_bytes_it_hashes(
     assert store.read(linked) == b"registered logo"
 
 
+def test_asset_read_accepts_legacy_octet_stream_registrations(tmp_path: Path) -> None:
+    source = tmp_path / "legacy.bin"
+    source.write_bytes(b"legacy asset")
+    store = AssetStore(tmp_path / "managed")
+    registration = store.import_managed(
+        asset_id="asset.legacy",
+        name="Legacy asset",
+        source=source,
+        media_type="application/octet-stream",
+        required=False,
+    )
+
+    assert store.read(registration) == b"legacy asset"
+
+
 def test_asset_import_rejects_symlinks_unsupported_types_and_large_files(
     tmp_path: Path,
 ) -> None:
@@ -135,7 +150,7 @@ def test_asset_import_rejects_symlinks_unsupported_types_and_large_files(
             asset_id="asset.too.large",
             name="Large",
             source=source,
-            media_type="application/octet-stream",
+            media_type="image/png",
             required=True,
         )
     with pytest.raises(ValueError, match="symbolic links"):
@@ -143,7 +158,7 @@ def test_asset_import_rejects_symlinks_unsupported_types_and_large_files(
             asset_id="asset.link",
             name="Link",
             source=link,
-            media_type="application/octet-stream",
+            media_type="image/png",
             required=True,
         )
 

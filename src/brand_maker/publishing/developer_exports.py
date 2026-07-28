@@ -1,9 +1,29 @@
 """Stable developer-facing projections of canonical implementation guidance."""
 
+import io
 import json
 import re
+import zipfile
+from pathlib import Path
 
-from brand_maker.brand_system.models import PublishedVersion, WorkingDraft
+from brand_maker.brand_bible import render_brand_bible
+from brand_maker.brand_system.assets import AssetChanged, AssetMissing, AssetStore
+from brand_maker.brand_system.models import AssetRegistration, PublishedVersion, WorkingDraft
+from brand_maker.publishing.archive import MAX_ARCHIVE_BYTES, MAX_ENTRIES, MAX_ENTRY_BYTES
+from brand_maker.publishing.markdown import export_markdown
+from brand_maker.publishing.pdf import render_html_pdf
+
+
+class BrandKitLimitExceeded(ValueError):
+    """A draft brand kit cannot be produced within the archive safety limits."""
+
+
+class RequiredBrandKitAssetUnavailable(ValueError):
+    """A required registered asset cannot be included safely."""
+
+    def __init__(self, asset: AssetRegistration) -> None:
+        self.asset = asset
+        super().__init__(asset.name)
 
 
 def _semantic_name(value: str) -> str:
@@ -128,3 +148,68 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
         "change-manifest.json": json.dumps(change_payload, sort_keys=True, separators=(",", ":"))
         + "\n",
     }
+
+
+def _safe_zip_filename(name: str) -> str:
+    base = Path(name).name
+    cleaned = re.sub(r"[^a-zA-Z0-9_ .-]", "_", base).strip(". ")
+    return cleaned or "file"
+
+
+def build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
+    if len(draft.assets) + 5 > MAX_ENTRIES:
+        raise BrandKitLimitExceeded(f"Brand kit contains too many entries (max {MAX_ENTRIES}).")
+    token_exports = export_draft_tokens(draft)
+    md_content = export_markdown(draft, version="draft", amendment_revision=0)
+    html_content = render_brand_bible(draft, for_pdf=True)
+    pdf_bytes = render_html_pdf(html_content)
+
+    safe_name = _safe_zip_filename(draft.brand_name)
+    buffer = io.BytesIO()
+    total_bytes = 0
+    seen_names: set[str] = set()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        def write_entry(path: str, value: str | bytes) -> None:
+            nonlocal total_bytes
+            data = value.encode("utf-8") if isinstance(value, str) else value
+            if len(data) > MAX_ENTRY_BYTES:
+                raise BrandKitLimitExceeded(
+                    f"Brand kit entry '{path}' exceeds the {MAX_ENTRY_BYTES} byte limit."
+                )
+            total_bytes += len(data)
+            if total_bytes > MAX_ARCHIVE_BYTES:
+                raise BrandKitLimitExceeded("Brand kit exceeds the 250 MB archive limit.")
+            seen_names.add(path)
+            zf.writestr(path, data)
+
+        write_entry("tokens.css", token_exports["tokens.css"])
+        write_entry("tokens.json", token_exports["tokens.json"])
+        write_entry("tailwind.config.js", token_exports["tailwind.config.js"])
+        write_entry(f"{safe_name}-bible.md", md_content)
+        write_entry(f"{safe_name}-bible.pdf", pdf_bytes)
+
+        for asset in draft.assets:
+            if asset.size_bytes > MAX_ENTRY_BYTES:
+                if asset.required:
+                    raise BrandKitLimitExceeded(
+                        f"Required asset '{asset.name}' exceeds the 25 MB entry limit."
+                    )
+                continue
+            try:
+                asset_bytes = asset_store.read(asset)
+                base_name = _safe_zip_filename(asset.name)
+                stem = Path(base_name).stem
+                extension = Path(base_name).suffix
+                candidate_name = f"assets/{base_name}"
+                counter = 1
+                while candidate_name in seen_names:
+                    candidate_name = f"assets/{stem}_{counter}{extension}"
+                    counter += 1
+                write_entry(candidate_name, asset_bytes)
+            except BrandKitLimitExceeded:
+                raise
+            except (AssetMissing, AssetChanged, ValueError) as exc:
+                if asset.required:
+                    raise RequiredBrandKitAssetUnavailable(asset) from exc
+
+    return buffer.getvalue()

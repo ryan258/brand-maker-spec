@@ -9,6 +9,7 @@ from brand_maker.brand_system.publication import SQLitePublicationRepository
 from brand_maker.config import Settings
 from brand_maker.models import BrandResponse
 from brand_maker.publishing.archive import (
+    MAX_ARCHIVE_BYTES,
     InvalidArchive,
     create_archive,
     import_archive,
@@ -71,6 +72,24 @@ def test_archive_import_api_restores_publication_for_normal_routes(tmp_path: Pat
     assert imported.status_code == 201
     assert fetched.status_code == 200
     assert fetched.json()["content_hash"] == published.content_hash
+
+
+def test_archive_import_rejects_declared_oversized_body_before_buffering(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        openrouter_api_key="test-key",
+        database_path=tmp_path / "oversized.db",
+    )
+
+    with TestClient(create_app(settings=settings, pipeline=UnusedPipeline())) as api:
+        response = api.post(
+            "/api/brand-system-archives",
+            content=b"not-an-archive",
+            headers={"Content-Length": str(MAX_ARCHIVE_BYTES + 1)},
+        )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Archive exceeds the safety limit."
 
 
 def test_archive_rejects_traversal_before_writing_assets(tmp_path: Path) -> None:

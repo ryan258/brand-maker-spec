@@ -214,9 +214,7 @@ def test_copy_compliance_uses_structured_never_say_specifications() -> None:
     assert report.overall_status == "warning"
     assert report.violations[0].matched_text == "game-changing"
     rules = deterministic_copy_rules(workspace)
-    assert [(rule.kind, rule.parameter) for rule in rules] == [
-        ("forbidden_term", "game-changing")
-    ]
+    assert [(rule.kind, rule.parameter) for rule in rules] == [("forbidden_term", "game-changing")]
 
 
 def test_published_compliance_rule_ids_remain_within_contract_limits() -> None:
@@ -240,6 +238,28 @@ def test_published_compliance_rule_ids_remain_within_contract_limits() -> None:
     rules = deterministic_copy_rules(workspace)
 
     assert len(rules[0].id) <= 128
+
+
+def test_long_copy_rule_ids_preserve_blocking_enforcement() -> None:
+    rule = BrandRule(
+        id="rule." + "x" * 120,
+        name="No hype",
+        description='Never say "game-changing".',
+        enforcement="blocking",
+    )
+    workspace = WorkingDraft(
+        brand_id=uuid4(),
+        brand_name="Fieldwell",
+        owner=LocalOwner(display_name="Owner"),
+        revision=1,
+        sections=[BrandSection(id="section.voice", title="Voice", rules=[rule])],
+    )
+
+    report = check_copy_against_brand_rules("A game-changing platform.", workspace)
+
+    assert report.overall_status == "fail"
+    assert report.violations[0].enforcement == "blocking"
+    assert report.violations[0].rule_name == "No hype"
 
 
 def test_token_collision_audit():
