@@ -180,10 +180,9 @@ and `2` for invalid input or evaluation failure.
 - `ui.py`: safe browser-side generation and result rendering behavior.
 - `storage.py`: parameterized SQLite persistence and bounded pagination.
 - `library_web.py`: collection and full-detail HTML shells.
-- `library_ui.py`: safe collection/detail loading and rendering behavior.
-- `library_styles.py`: shared responsive library design system.
-- `workshop_web.py` / `workshop_ui.py` / `workshop_styles.py`: living-brand workspace HTML shells, dependency-free behavior, and styles.
-- `compliance_web.py` / `compliance_ui.py`: local compliance workflow shell and text-only DOM behavior.
+- `static/`: shared browser scripts and responsive styles for library, workshop, and compliance pages.
+- `workshop_web.py`: living-brand workspace HTML shells.
+- `compliance_web.py`: local compliance workflow shell.
 - `evaluation.py`: deterministic checks and the exact LLM judge rubric.
 
 Framework patterns follow the official documentation for
