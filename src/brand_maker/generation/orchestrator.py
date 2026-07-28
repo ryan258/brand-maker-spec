@@ -9,6 +9,7 @@ from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from brand_maker.brand_system.models import (
     BrandSection,
@@ -16,7 +17,10 @@ from brand_maker.brand_system.models import (
     EvidenceSource,
     WorkingDraft,
 )
-from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
+from brand_maker.brand_system.repository import (
+    SQLiteBrandSystemRepository,
+    StaleDraftRevision,
+)
 from brand_maker.generation.prompts import PROMPT_VERSION, section_messages
 from brand_maker.generation.repository import (
     GenerationRun,
@@ -213,11 +217,26 @@ class GenerationOrchestrator:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._id_factory = id_factory
         self._run_locks: dict[UUID, asyncio.Lock] = {}
-        self._listeners: dict[UUID, list[asyncio.Queue[dict[str, object]]]] = {}
+        self._run_lock_users: dict[UUID, int] = {}
+        self._listeners: dict[
+            UUID,
+            list[tuple[asyncio.AbstractEventLoop | None, asyncio.Queue[dict[str, object]]]],
+        ] = {}
 
-    def subscribe(self, run_id: UUID) -> asyncio.Queue[dict[str, object]]:
+    def subscribe(
+        self,
+        run_id: UUID,
+        *,
+        event_loop: asyncio.AbstractEventLoop | None = None,
+    ) -> asyncio.Queue[dict[str, object]]:
+        if event_loop is None:
+            try:
+                event_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
         queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=1)
-        self._listeners.setdefault(run_id, []).append(queue)
+        listener = (event_loop, queue)
+        self._listeners.setdefault(run_id, []).append(listener)
         run = self._runs.get(run_id)
         if run is None:
             self.unsubscribe(run_id, queue)
@@ -227,24 +246,18 @@ class GenerationOrchestrator:
 
     def unsubscribe(self, run_id: UUID, queue: asyncio.Queue[dict[str, object]]) -> None:
         if run_id in self._listeners:
-            try:
-                self._listeners[run_id].remove(queue)
-            except ValueError:
-                pass
+            self._listeners[run_id] = [
+                listener for listener in self._listeners[run_id] if listener[1] is not queue
+            ]
             if not self._listeners[run_id]:
                 del self._listeners[run_id]
 
     def _notify(self, run: GenerationRun) -> None:
         if run.id in self._listeners:
             event = self._event(run)
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            for queue in list(self._listeners[run.id]):
-                if loop and loop.is_running():
-                    loop.call_soon_threadsafe(_safe_put, queue, event)
+            for event_loop, queue in list(self._listeners[run.id]):
+                if event_loop is not None and event_loop.is_running():
+                    event_loop.call_soon_threadsafe(_safe_put, queue, event)
                 else:
                     _safe_put(queue, event)
 
@@ -263,6 +276,59 @@ class GenerationOrchestrator:
         saved = self._runs.save(run)
         self._notify(saved)
         return saved
+
+    async def _save_and_notify_async(self, run: GenerationRun) -> GenerationRun:
+        saved = await run_in_threadpool(self._runs.save, run)
+        self._notify(saved)
+        return saved
+
+    async def _persist_generated_section(
+        self,
+        *,
+        draft: WorkingDraft,
+        generated: BrandSection,
+        evidence: EvidenceSource,
+        decision: DecisionRecord,
+    ) -> None:
+        current = draft
+        for conflict_attempt in range(3):
+            if not any(item.id == generated.id for item in current.sections):
+                raise ValueError(f"section {generated.id} disappeared during generation")
+            sections = [generated if item.id == generated.id else item for item in current.sections]
+            payload = current.model_dump(mode="json")
+            payload.update(
+                {
+                    "sections": [item.model_dump(mode="json") for item in sections],
+                    "evidence": [
+                        *[item.model_dump(mode="json") for item in current.evidence],
+                        evidence.model_dump(mode="json"),
+                    ],
+                    "decisions": [
+                        *[item.model_dump(mode="json") for item in current.decisions],
+                        decision.model_dump(mode="json"),
+                    ],
+                    "revision": current.revision + 1,
+                }
+            )
+            updated = WorkingDraft.model_validate(payload)
+            try:
+                await run_in_threadpool(
+                    self._workspaces.update,
+                    updated,
+                    expected_revision=current.revision,
+                )
+                return
+            except StaleDraftRevision as exc:
+                if conflict_attempt == 2:
+                    raise ValueError("draft remained busy during generation") from exc
+                _logger.info(
+                    "re-fetching draft for section %s due to revision conflict",
+                    generated.id,
+                )
+                latest = await run_in_threadpool(self._workspaces.get, current.brand_id)
+                if latest is None:
+                    raise GenerationRunNotFound from exc
+                current = latest
 
     def start(
         self,
@@ -297,34 +363,147 @@ class GenerationOrchestrator:
 
     async def resume(self, run_id: UUID, *, completer: Completer) -> GenerationRun:
         lock = self._run_locks.setdefault(run_id, asyncio.Lock())
-        async with lock:
-            return await self._resume(run_id, completer=completer)
+        self._run_lock_users[run_id] = self._run_lock_users.get(run_id, 0) + 1
+        try:
+            async with lock:
+                return await self._resume(run_id, completer=completer)
+        finally:
+            remaining = self._run_lock_users[run_id] - 1
+            if remaining:
+                self._run_lock_users[run_id] = remaining
+            else:
+                self._run_lock_users.pop(run_id, None)
+                if self._run_locks.get(run_id) is lock:
+                    self._run_locks.pop(run_id, None)
 
     async def _resume(self, run_id: UUID, *, completer: Completer) -> GenerationRun:
-        run = self._runs.get(run_id)
+        run = await run_in_threadpool(self._runs.get, run_id)
         if run is None:
             raise GenerationRunNotFound
         if run.status in {"cancelled", "completed"}:
             return run
         run = run.model_copy(update={"status": "running", "updated_at": self._clock()})
-        self._save_and_notify(run)
-        while run.cursor < len(run.sections):
-            persisted = self._runs.get(run.id)
-            if persisted is None:
-                raise GenerationRunNotFound
-            if persisted.status in {"paused", "cancelled"}:
-                return persisted
-            state = run.sections[run.cursor]
-            draft = self._workspaces.get(run.brand_id)
-            if draft is None:
-                raise GenerationRunNotFound
-            definition = SECTION_CATALOG[state.section_id]
-            current_section = next(item for item in draft.sections if item.id == state.section_id)
-            if current_section.locked:
-                states = list(run.sections)
-                states[run.cursor] = state.model_copy(
-                    update={"status": "preserved_locked", "error": None}
+        await self._save_and_notify_async(run)
+        try:
+            while run.cursor < len(run.sections):
+                persisted = await run_in_threadpool(self._runs.get, run.id)
+                if persisted is None:
+                    raise GenerationRunNotFound
+                if persisted.status in {"paused", "cancelled"}:
+                    return persisted
+                state = run.sections[run.cursor]
+                draft = await run_in_threadpool(self._workspaces.get, run.brand_id)
+                if draft is None:
+                    raise GenerationRunNotFound
+                definition = SECTION_CATALOG[state.section_id]
+                current_section = next(
+                    (item for item in draft.sections if item.id == state.section_id), None
                 )
+                if current_section is None:
+                    _logger.warning(
+                        "section %s missing from draft %s", state.section_id, draft.brand_id
+                    )
+                    states = list(run.sections)
+                    states[run.cursor] = state.model_copy(
+                        update={
+                            "status": "failed",
+                            "error": f"Section {state.section_id} missing from draft.",
+                        }
+                    )
+                    run = run.model_copy(
+                        update={
+                            "sections": states,
+                            "status": "failed",
+                            "updated_at": self._clock(),
+                        }
+                    )
+                    return await self._save_and_notify_async(run)
+                if current_section.locked:
+                    states = list(run.sections)
+                    states[run.cursor] = state.model_copy(
+                        update={"status": "preserved_locked", "error": None}
+                    )
+                    run = run.model_copy(
+                        update={
+                            "sections": states,
+                            "cursor": run.cursor + 1,
+                            "updated_at": self._clock(),
+                        }
+                    )
+                    await self._save_and_notify_async(run)
+                    continue
+                accepted = False
+                last_error = "Section generation failed validation."
+                selected_model = run.model
+                messages = section_messages(
+                    definition=definition,
+                    brand_name=draft.brand_name,
+                    brand_context=draft.brand_context,
+                    founding_brief=_founding_brief(draft),
+                    accepted_context=_build_accepted_context(
+                        draft.sections, prerequisites=prerequisite_closure(state.section_id)
+                    ),
+                )
+                for _ in range(3):
+                    state = state.model_copy(update={"attempts": state.attempts + 1})
+                    try:
+                        raw = await completer.complete(
+                            messages=messages,
+                            model=selected_model,
+                            temperature=0.5,
+                            max_tokens=2_500,
+                        )
+                        envelope = GeneratedSectionEnvelope.model_validate_json(
+                            extract_json_object(raw)
+                        )
+                        if envelope.prompt_version != PROMPT_VERSION:
+                            raise ValueError("prompt version mismatch")
+                        if envelope.section_id != state.section_id:
+                            raise ValueError("section identity mismatch")
+                        generated, evidence, decision = _record_generated_decision(
+                            envelope,
+                            run=run,
+                            model=selected_model,
+                            recorded_at=self._clock(),
+                        )
+                        await self._persist_generated_section(
+                            draft=draft,
+                            generated=generated,
+                            evidence=evidence,
+                            decision=decision,
+                        )
+                        accepted = True
+                        break
+                    except ModelUnavailable as exc:
+                        last_error = "Model provider unavailable."
+                        _logger.warning(
+                            "section %s model %s unavailable: %s",
+                            state.section_id,
+                            selected_model,
+                            exc,
+                        )
+                        if run.fallback_model and selected_model != run.fallback_model:
+                            selected_model = run.fallback_model
+                        continue
+                    except (NoJSONObject, ProviderError, ValidationError, ValueError) as exc:
+                        last_error = "Section generation failed."
+                        _logger.warning(
+                            "section %s attempt failed (%s): %s",
+                            state.section_id,
+                            type(exc).__name__,
+                            exc,
+                        )
+                        continue
+                states = list(run.sections)
+                if not accepted:
+                    states[run.cursor] = state.model_copy(
+                        update={"status": "failed", "error": last_error}
+                    )
+                    run = run.model_copy(
+                        update={"sections": states, "status": "failed", "updated_at": self._clock()}
+                    )
+                    return await self._save_and_notify_async(run)
+                states[run.cursor] = state.model_copy(update={"status": "accepted", "error": None})
                 run = run.model_copy(
                     update={
                         "sections": states,
@@ -332,105 +511,21 @@ class GenerationOrchestrator:
                         "updated_at": self._clock(),
                     }
                 )
-                self._save_and_notify(run)
-                continue
-            accepted = False
-            last_error = "Section generation failed validation."
-            selected_model = run.model
-            messages = section_messages(
-                definition=definition,
-                brand_name=draft.brand_name,
-                brand_context=draft.brand_context,
-                founding_brief=_founding_brief(draft),
-                accepted_context=_build_accepted_context(
-                    draft.sections, prerequisites=prerequisite_closure(state.section_id)
-                ),
-            )
-            for _ in range(3):
-                state = state.model_copy(update={"attempts": state.attempts + 1})
-                try:
-                    raw = await completer.complete(
-                        messages=messages,
-                        model=selected_model,
-                        temperature=0.5,
-                        max_tokens=2_500,
-                    )
-                    envelope = GeneratedSectionEnvelope.model_validate_json(
-                        extract_json_object(raw)
-                    )
-                    if envelope.prompt_version != PROMPT_VERSION:
-                        raise ValueError("prompt version mismatch")
-                    if envelope.section_id != state.section_id:
-                        raise ValueError("section identity mismatch")
-                    generated, evidence, decision = _record_generated_decision(
-                        envelope,
-                        run=run,
-                        model=selected_model,
-                        recorded_at=self._clock(),
-                    )
-                    sections = [
-                        generated if item.id == state.section_id else item
-                        for item in draft.sections
-                    ]
-                    payload = draft.model_dump(mode="json")
-                    payload.update(
-                        {
-                            "sections": [item.model_dump(mode="json") for item in sections],
-                            "evidence": [
-                                *[item.model_dump(mode="json") for item in draft.evidence],
-                                evidence.model_dump(mode="json"),
-                            ],
-                            "decisions": [
-                                *[item.model_dump(mode="json") for item in draft.decisions],
-                                decision.model_dump(mode="json"),
-                            ],
-                            "revision": draft.revision + 1,
-                        }
-                    )
-                    updated = WorkingDraft.model_validate(payload)
-                    self._workspaces.update(updated, expected_revision=draft.revision)
-                    accepted = True
-                    break
-                except ModelUnavailable as exc:
-                    last_error = "Model provider unavailable."
-                    _logger.warning(
-                        "section %s model %s unavailable: %s",
-                        state.section_id,
-                        selected_model,
-                        exc,
-                    )
-                    if run.fallback_model and selected_model != run.fallback_model:
-                        selected_model = run.fallback_model
-                    continue
-                except (NoJSONObject, ProviderError, ValidationError, ValueError) as exc:
-                    last_error = "Section generation failed."
-                    _logger.warning(
-                        "section %s attempt failed (%s): %s",
-                        state.section_id,
-                        type(exc).__name__,
-                        exc,
-                    )
-                    continue
+                await self._save_and_notify_async(run)
+            run = run.model_copy(update={"status": "completed", "updated_at": self._clock()})
+            return await self._save_and_notify_async(run)
+        except Exception as exc:
+            _logger.exception("unhandled error during generation run %s", run_id)
             states = list(run.sections)
-            if not accepted:
-                states[run.cursor] = state.model_copy(
-                    update={"status": "failed", "error": last_error}
+            if run.cursor < len(states):
+                states[run.cursor] = states[run.cursor].model_copy(
+                    update={"status": "failed", "error": str(exc)}
                 )
-                run = run.model_copy(
-                    update={"sections": states, "status": "failed", "updated_at": self._clock()}
-                )
-                return self._save_and_notify(run)
-            states[run.cursor] = state.model_copy(update={"status": "accepted", "error": None})
             run = run.model_copy(
-                update={
-                    "sections": states,
-                    "cursor": run.cursor + 1,
-                    "updated_at": self._clock(),
-                }
+                update={"sections": states, "status": "failed", "updated_at": self._clock()}
             )
-            self._save_and_notify(run)
-        run = run.model_copy(update={"status": "completed", "updated_at": self._clock()})
-        return self._save_and_notify(run)
+            await self._save_and_notify_async(run)
+            raise
 
     def pause(self, run_id: UUID) -> GenerationRun:
         return self._set_terminal_control(run_id, "paused")

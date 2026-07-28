@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 from pathlib import Path
 from uuid import UUID
 
@@ -15,7 +16,8 @@ from brand_maker.brand_system.models import (
     WorkingDraft,
     WorkspaceBrief,
 )
-from brand_maker.brand_system.repository import SQLiteBrandSystemRepository
+from brand_maker.brand_system.repository import SQLiteBrandSystemRepository, StaleDraftRevision
+from brand_maker.generation import orchestrator as orchestrator_module
 from brand_maker.generation.orchestrator import (
     GenerationOrchestrator,
     _build_accepted_context,
@@ -185,6 +187,59 @@ async def test_complete_run_persists_every_section_and_finishes(tmp_path: Path) 
     assert stored.sections[0].blocks[0].decision_ids == [strategy_decision.id]
 
 
+async def test_resume_delivers_queue_events_on_the_subscriber_loop(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspaces, draft = workspace(tmp_path / "brands.db")
+    orchestrator = GenerationOrchestrator(
+        workspaces=workspaces,
+        runs=SQLiteGenerationRepository(tmp_path / "brands.db"),
+    )
+    run = orchestrator.start(draft, target_section_id="section.strategy", model="test-model")
+    queue = orchestrator.subscribe(run.id)
+    queue.get_nowait()
+    subscriber_thread = threading.get_ident()
+    delivery_threads: list[int] = []
+    original_safe_put = orchestrator_module._safe_put
+
+    def record_delivery(queue, event):
+        delivery_threads.append(threading.get_ident())
+        original_safe_put(queue, event)
+
+    monkeypatch.setattr(orchestrator_module, "_safe_put", record_delivery)
+
+    await orchestrator.resume(run.id, completer=GoodCompleter())
+    await asyncio.sleep(0)
+
+    assert delivery_threads
+    assert set(delivery_threads) == {subscriber_thread}
+
+
+async def test_generation_retries_repeated_workspace_conflicts(tmp_path: Path, monkeypatch) -> None:
+    workspaces, draft = workspace(tmp_path / "brands.db")
+    orchestrator = GenerationOrchestrator(
+        workspaces=workspaces,
+        runs=SQLiteGenerationRepository(tmp_path / "brands.db"),
+    )
+    run = orchestrator.start(draft, target_section_id="section.strategy", model="test-model")
+    real_update = workspaces.update
+    attempts = 0
+
+    def conflict_twice(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 2:
+            raise StaleDraftRevision
+        return real_update(*args, **kwargs)
+
+    monkeypatch.setattr(workspaces, "update", conflict_twice)
+
+    completed = await orchestrator.resume(run.id, completer=GoodCompleter())
+
+    assert completed.status == "completed"
+    assert attempts == 3
+
+
 async def test_failed_run_resumes_without_repeating_accepted_work(tmp_path: Path) -> None:
     workspaces, draft = workspace(tmp_path / "brands.db")
     runs = SQLiteGenerationRepository(tmp_path / "brands.db")
@@ -259,6 +314,8 @@ async def test_duplicate_resume_commands_share_one_bounded_run(tmp_path: Path) -
 
     assert first.status == second.status == "completed"
     assert completer.calls == ["section.strategy"]
+    assert orchestrator._run_locks == {}
+    assert orchestrator._run_lock_users == {}
 
 
 def _draft_with_brief(brief: WorkspaceBrief) -> WorkingDraft:
