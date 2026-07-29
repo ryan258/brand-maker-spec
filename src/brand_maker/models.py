@@ -90,6 +90,8 @@ class SavedBrand(ContractModel):
     id: UUID
     created_at: datetime
     kit: BrandKit
+    # Set by the detail endpoint when a living workspace already sources this kit.
+    workspace_id: UUID | None = None
 
 
 class BrandSummary(ContractModel):

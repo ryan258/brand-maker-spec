@@ -250,6 +250,12 @@ def create_app(
         saved = await run_in_threadpool(store.get, brand_id)
         if saved is None:
             raise HTTPException(status_code=404, detail="Brand not found.")
-        return saved
+        workspaces = cast(
+            SQLiteBrandSystemRepository, request.app.state.brand_system_repository
+        )
+        existing = await run_in_threadpool(workspaces.get_by_source_brand_id, brand_id)
+        return saved.model_copy(
+            update={"workspace_id": existing.brand_id if existing is not None else None}
+        )
 
     return app

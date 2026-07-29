@@ -72,6 +72,8 @@ def test_create_brand_saves_success_and_exposes_full_detail(tmp_path: Path) -> N
     assert detail.status_code == 200
     assert detail.json()["id"] == brand_id
     assert detail.json()["kit"]["tagline"] == "Search less. Guess more."
+    # The kit page needs this to link back into the workspace instead of offering to build one.
+    assert detail.json()["workspace_id"] == workspace_id
     assert pipeline.calls == ["Floogle"]
     assert pipeline.contexts == [None]
 
@@ -162,7 +164,9 @@ def test_brand_list_is_paginated_newest_first(tmp_path: Path) -> None:
 
     with TestClient(create_app(settings=settings, pipeline=pipeline, repository=store)) as client:
         response = client.get("/api/brands?page=1&pageSize=1")
+        unbuilt = client.get(f"/api/brands/{first.id}")
 
+    assert unbuilt.json()["workspace_id"] is None
     assert response.status_code == 200
     assert response.json()["page_size"] == 1
     assert response.json()["total_items"] == 2
