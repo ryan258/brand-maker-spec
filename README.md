@@ -9,7 +9,10 @@ a quick entry path into the same durable workspace.
 The approved product direction and implementation sequence live in
 [`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md) and
 [`docs/specs/personal-brand-os-implementation-plan.md`](docs/specs/personal-brand-os-implementation-plan.md).
-For a browser walkthrough, see [`docs/happy-path.md`](docs/happy-path.md).
+For a browser walkthrough, see [`docs/happy-path.md`](docs/happy-path.md), and for
+100 copy-and-paste example briefs see
+[`docs/100-awesome-brand-demos.md`](docs/100-awesome-brand-demos.md) and
+[`docs/100-parody-brand-demos.md`](docs/100-parody-brand-demos.md).
 
 ## Quick start
 
