@@ -231,6 +231,13 @@ def test_zip_export_path_traversal_sanitization() -> None:
                 files={"file": ("logo2.svg", file_content, "image/svg+xml")},
             )
 
+            # Generated derivatives are named like this one: no extension of their own.
+            api.post(
+                f"/api/brand-systems/{brand_id}/asset-uploads",
+                data={"expected_revision": 4, "name": "logo — favicon 16", "required": False},
+                files={"file": ("favicon.png", file_content, "image/png")},
+            )
+
             kit_res = api.get(f"/api/brand-systems/{brand_id}/draft-exports/kit")
             assert kit_res.status_code == 200
 
@@ -238,6 +245,7 @@ def test_zip_export_path_traversal_sanitization() -> None:
                 namelist = zf.namelist()
                 for name in namelist:
                     assert ".." not in name
+                assert "assets/logo _ favicon 16.png" in namelist
                 assert "assets/outside.svg" in namelist
                 assert "assets/logo_.svg" in namelist
                 assert "assets/logo__1.svg" in namelist

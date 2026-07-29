@@ -2,6 +2,7 @@
 
 import io
 import json
+import mimetypes
 import re
 import zipfile
 from pathlib import Path
@@ -156,6 +157,15 @@ def _safe_zip_filename(name: str) -> str:
     return cleaned or "file"
 
 
+def _asset_zip_filename(asset: AssetRegistration) -> str:
+    """Derivative names carry no extension, so recover one from the registered media type."""
+
+    base = _safe_zip_filename(asset.name)
+    if Path(base).suffix:
+        return base
+    return base + (mimetypes.guess_extension(asset.media_type) or "")
+
+
 def build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
     if len(draft.assets) + 5 > MAX_ENTRIES:
         raise BrandKitLimitExceeded(f"Brand kit contains too many entries (max {MAX_ENTRIES}).")
@@ -197,7 +207,7 @@ def build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
                 continue
             try:
                 asset_bytes = asset_store.read(asset)
-                base_name = _safe_zip_filename(asset.name)
+                base_name = _asset_zip_filename(asset)
                 stem = Path(base_name).stem
                 extension = Path(base_name).suffix
                 candidate_name = f"assets/{base_name}"
