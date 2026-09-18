@@ -19,8 +19,37 @@ changes remain untouched until they can be reconciled deliberately.
 - Complete: Task 3.3 (incremental structured brief and privacy-visible evidence intake).
 - Complete in the current local workflow: resumable streaming generation, field
   regeneration and posture variants; logo generation, derivatives, font validation,
-  and contrast checks; exact-revision compliance; browser governance/recovery flows;
-  and Markdown, PDF, archive, and developer-token exports.
+  and contrast checks; and Markdown, PDF, archive, and developer-token exports.
+- Partial: compliance results are now bound to the exact artifact input, rule set, and
+  brand state, but the evaluation API still accepts caller-supplied rules without a
+  resolved publication unless `brand_id` is given.
+- Partial: the browser has generation pause/resume/cancel with reattachment after
+  reload, section editing, brief, assets and readiness. Approval, publication, history,
+  undo/redo, trash, backup and restore exist as APIs only — there is no browser control
+  for them yet, so "browser governance/recovery flows" is not complete.
+
+Completion below means demonstrated behavior with a test, not the presence of an
+endpoint or a model.
+
+## Capability status
+
+| Capability | API | Browser path | Verified behavior | Notes |
+|---|---|---|---|---|
+| Workspace create/edit/brief/evidence | yes | yes | yes | Autosave now stops retrying permanent failures and offers Retry save |
+| Section generation (run, pause, resume, cancel) | yes | yes | yes | Resume control and reattach-after-reload added; controls survive an in-flight call |
+| Lock / approved anchors | yes | lock via API only | yes | Generation preserves locked and approved sections; no lock button in the workshop yet |
+| Readiness | yes | yes | yes | Core-section profile enforced; unverified decisions warn at approved, block at production-ready |
+| Decision verification | yes | no | yes | `POST /api/brand-systems/{id}/decision-verifications` |
+| Approval and publication | yes | no | yes | Required managed assets revalidated at publication |
+| Amendments | yes | no | yes | — |
+| Audience projections (HTML, PDF) | yes | yes | yes | Rules, tokens, examples, and assets now rendered |
+| Markdown interchange | yes | yes | yes | Round-trips content containing backticks |
+| Developer/token exports | yes | yes | yes | Stable, unique identifiers; brand name cannot become code |
+| Archives (create, restore, import) | yes | yes | yes | Publication claims validated; shared blobs round-trip; import is atomic |
+| Backup, restore, trash, undo/redo | yes | no | partial | APIs exist and are tested; no browser controls |
+| Compliance (deterministic) | yes | yes | yes | Results bound to exact input, rules, and brand state |
+| Compliance (canonical publication binding) | partial | no | partial | Enforced only when `brand_id` is supplied |
+| Research import, scheduling, SDK/CLI sync, webhooks, analytics, multilingual | no | no | no | Planned |
 - Next: Task 3.4, explicit bounded project and document import. Later phases remain
   partially complete where their acceptance criteria include unshipped items such as
   research import, scheduled checks, SDK/CLI sync, webhooks, analytics, multilingual

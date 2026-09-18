@@ -1,10 +1,14 @@
 # 100 Parody Brand Demos
 
 Copy-and-paste briefs for demoing the generator's comedic range. Every brand here is
-invented, and every **Parody target** is a category, convention, or behavior — not a
-real company. That keeps the output original and non-infringing, and it maps directly
-onto the legacy `parody_target` field, which the prompt defines as "the category,
-convention, or alternative this brand reacts against."
+invented, and every **Parody target** is written as a category, convention, or behavior
+rather than a real company, which maps directly onto the legacy `parody_target` field —
+the prompt defines it as "the category, convention, or alternative this brand reacts
+against."
+
+These are inputs, not validated fixtures. Aiming at a category rather than a company is
+intended to keep generated output clear of real marks, but it is not a guarantee about
+any particular output: review what the model returns before using it anywhere.
 
 For sincere, real-world briefs see
 [`100-awesome-brand-demos.md`](100-awesome-brand-demos.md).

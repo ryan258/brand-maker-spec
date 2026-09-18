@@ -8,8 +8,9 @@
   paths with adaptive assistance and controlled-research metadata.
 - Added durable evidence and decision records so generated guidance retains rationale,
   provenance, confidence explanation, prompt version, model, and generation-run identity.
-- Added maturity-aware readiness reports and blocked approval/publication of empty or
-  materially incomplete brand systems.
+- Added maturity-aware readiness reports that block approval and publication of brand
+  systems missing a required core section, missing canonical content in a section, or
+  holding sections that are not yet reviewed or approved.
 - Made every successful browser quick start create a concept-stage living workspace
   while preserving the saved quick-kit record and compatibility API.
 - Added keyboard-accessible creation choices for raw ideas, named concepts, and
@@ -71,6 +72,52 @@
 
 ### Fixed
 
+- Stopped a brand name from injecting executable JavaScript into the exported Tailwind
+  config: the name is now written as an escaped JSON string literal, so a Unicode line
+  separator (U+2028/U+2029) can no longer close the comment and start a statement.
+- Made exported token identifiers stable and unique: `token.a.b` and `token.a-b` no
+  longer collapse into one `--brand-token-a-b` declaration, draft and published exports
+  share one naming policy, and a name collision is reported instead of silently merged.
+- Stopped generation from overwriting an owner's lock or edit: when the target section
+  changed while the model was working, the owner's version is kept and the run reports
+  that section as `preserved_edited`.
+- Made pause and cancel durable: a run re-reads the persisted control state before
+  committing generated output, so a finishing worker can no longer erase a pause or
+  cancel that was issued during the provider call.
+- Made an approved section an anchor for generation, as the walkthrough promised;
+  previously only an explicit lock protected content.
+- Bound compliance results to the exact evaluated input: the artifact hash now covers
+  declared tokens, foreground/background colors, and dimensions, and a stored result is
+  keyed by the rule definitions, brand identity, and publication content hash, so a
+  saved pass can no longer be returned for an artifact that now fails.
+- Made readiness enforce the completeness it claims: an approved brand system must
+  contain its core sections, and unverified decisions are reported (blocking for
+  production-ready). Added `POST /api/brand-systems/{id}/decision-verifications` so the
+  owner can record verification.
+- Made publication revalidate required managed assets, so a draft whose required managed
+  blob is missing or altered can no longer be published.
+- Made archive import verify what the publication claims, not just the ZIP: the
+  canonical content hash, manifest/snapshot agreement, approval and amendment ownership,
+  and the reapplied amendment result are all checked before the archive is accepted.
+- Fixed publication archives failing to round-trip when two asset registrations share
+  one blob, and stopped archive creation from assuming an optional linked asset lives
+  under the managed root.
+- Made archive import atomic: the asset tree is replaced inside the database
+  transaction, so a database conflict no longer leaves replaced assets behind.
+- Fixed Markdown interchange breaking on a backtick in the brand name or prose, and
+  rendered rules, tokens, examples, and assets in the readable Markdown instead of
+  leaving them only inside the embedded JSON.
+- Added rules, tokens, examples, and assets to the HTML and PDF audience outputs, and
+  removed the audience mapping's reference to a `section.audience` that does not exist.
+- Stopped autosave from retrying a permanent failure forever: a 409 or 422 keeps the
+  unsaved section, stops the automatic retry loop, offers an explicit Retry save, and
+  no longer blocks brief saving.
+- Restored every substantive brief field to the generation prompt; a brief holding only
+  constraints and differentiators previously reached the model as nothing at all.
+- Bounded token values to 2,000 characters so an unbounded string cannot reach a prompt
+  or an export.
+- Moved published PDF and archive generation off the event loop, and checked the brand
+  kit size estimate before rendering rather than after.
 - Fixed complete-draft generation that could never finish: the section-generation
   prompt now shows the model the section container and its block, rule, example, token,
   and pattern contracts, so schema-conforming sections are produced instead of failing
@@ -87,6 +134,15 @@
 
 ### Changed
 
+- Added a Resume control to the workshop's generation panel and reattachment to an
+  in-flight or paused run after reload (`GET /api/brand-systems/{id}/generation-runs/latest`),
+  so reloading no longer strands a run or starts a second one.
+- Corrected the happy-path walkthrough: hand-editing alone does not protect a section
+  (lock or approve it), and generating one section also regenerates its unlocked
+  prerequisites.
+- Corrected the root architecture document: the application is local-first but not
+  offline-capable — startup requires an OpenRouter key, generation is remote, and some
+  browser pages load fonts from a public CDN.
 - Reframed the product as a personal brand operating system rather than a parody-only
   generator; legacy quick-kit fields remain available for compatibility.
 - Replaced parody-oriented homepage, library, generation, and evaluation language with

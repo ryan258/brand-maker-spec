@@ -6,13 +6,15 @@ editing, resumable generation, approval and immutable publication, audience guid
 portable exports, and evidence-rich brand compliance. The fast one-name generator is
 a quick entry path into the same durable workspace.
 
-The approved product direction and implementation sequence live in
-[`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md) and
+The approved product direction, roadmap, and implementation sequence live in
+[`docs/specs/personal-brand-os.md`](docs/specs/personal-brand-os.md),
+[`roadmap.md`](roadmap.md) (and [`docs/specs/personal-brand-os-roadmap.md`](docs/specs/personal-brand-os-roadmap.md)), and
 [`docs/specs/personal-brand-os-implementation-plan.md`](docs/specs/personal-brand-os-implementation-plan.md).
 For a browser walkthrough, see [`docs/happy-path.md`](docs/happy-path.md), and for
 100 copy-and-paste example briefs see
 [`docs/100-awesome-brand-demos.md`](docs/100-awesome-brand-demos.md) and
 [`docs/100-parody-brand-demos.md`](docs/100-parody-brand-demos.md).
+
 
 ## Quick start
 
@@ -52,18 +54,25 @@ The living-brand workflow is:
    incrementally and offers starter answers to reduce typing.
 2. Edit sections manually or generate a complete/selected starting point. Generation
    obeys the founding brief; **Generate or refresh complete draft** regenerates
-   unlocked sections from the current brief while preserving locked ones.
+   unlocked sections from the current brief while preserving locked and approved ones.
+   Progress streams in real time via SSE with Pause, Resume, and Cancel controls.
+   If the browser is reloaded during generation, the workshop automatically reattaches
+   to the latest run. Hand edits or section locks made while the model works take
+   precedence over generated output.
 3. Open **View complete brand bible** for the live, navigable source of truth across
    context, guidance, rules, tokens, examples, patterns/playbooks, and registered
    assets; preview its brand-token dark mode, follow the active table of contents,
    print it, or save it as PDF directly from the browser. Patterns include
    say/never-say guidance, message systems, web-component specifications and states,
    type scales, layout templates, channel playbooks, and governance workflows.
-4. Review dependencies and the local audit feed, undo or redo revision-safe edits,
-   lock settled sections, approve an exact draft revision, and publish an immutable
+4. Review dependencies, readiness checklist findings, and the local audit feed; record
+   decision verifications to unblock maturity gates; undo or redo revision-safe edits;
+   lock settled sections; approve an exact draft revision; and publish an immutable
    semantic version.
-5. Render creator, designer, business, or agency views; export Markdown, developer
-   tokens/rules, canonical archives, or tagged PDF/UA.
+5. Render creator, designer, business, or agency views (rendering narrative, rules,
+   tokens, examples, and production assets); export Markdown, developer
+   tokens/rules (stable unique IDs with injection-safe configs), canonical archives, or
+   tagged PDF/UA.
 6. Register artifact revisions and run deterministic compliance checks. Unsupported
    checks, model judgment, evidence, and expiring exceptions remain visibly distinct.
 
@@ -84,18 +93,16 @@ browser uses the persistent library API:
 - `GET /api/brands?page=1&pageSize=12`: list saved brands newest first.
 - `GET /api/brands/{id}`: retrieve one complete saved brand.
 
-Living workspaces expose bounded audit history at
-`GET /api/brand-systems/{id}/audit`. Revision-safe `POST` requests to the sibling
-`/undo` and `/redo` endpoints require the current `expected_revision`; a new edit
-after undo deliberately closes the abandoned redo branch.
+Living workspaces expose bounded audit history and governance controls:
 
-`DELETE /api/brand-systems/{id}` moves a workspace into recoverable trash; list it at
-`GET /api/brand-system-trash` and restore it through the item-level `/restore` route.
-Download a checksum-bound portable backup from
-`GET /api/brand-systems/{id}/backup`. Restore a new workspace through
-`POST /api/brand-system-backups`, or pass the current `expectedRevision` to replace an
-existing or trashed workspace as a new revision. Restore validates the complete
-manifest and every managed asset before changing workspace state.
+- `GET /api/brand-systems/{id}/audit`: bounded audit trail of canonical workspace mutations.
+- `POST /api/brand-systems/{id}/undo` and `POST /api/brand-systems/{id}/redo`: revision-checked undo and redo.
+- `POST /api/brand-systems/{id}/decision-verifications`: record owner verification or waiver on factual claims.
+- `GET /api/brand-systems/{id}/generation-runs/latest`: reattach to an in-flight or paused generation run after page reload.
+- `DELETE /api/brand-systems/{id}`: move workspace to recoverable trash; list at `GET /api/brand-system-trash` and restore via item `/restore`.
+- `GET /api/brand-systems/{id}/backup`: download a portable, checksum-bound workspace ZIP backup.
+- `POST /api/brand-system-backups`: restore a new or existing workspace revision from backup.
+
 
 ## API outcomes
 

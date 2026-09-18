@@ -14,11 +14,11 @@ Completed ideas retain their original numbers in `changelog.md`.
 
 ## AI & Generation
 
-11. **Build** — Stream validated generation progress so users see work advance live.
-12. **Build** — Regenerate one field instead of replacing a whole section.
+11. **Completed** — Stream validated generation progress so users see work advance live (see `changelog.md`).
+12. **Completed** — Regenerate one field instead of replacing a whole section (see `changelog.md`).
 13. **Build** — Pick a conservative, balanced, or bold generation posture.
 14. **Build** — Show the exact prompt and allow versioned power-user edits.
-15. **Build** — Generate 2–3 variants and let the user compare, pick, or merge.
+15. **Completed** — Generate 2–3 variants and let the user compare, pick, or merge (see `changelog.md`).
 16. **Build** — Run a critique pass that flags cross-section contradictions.
 17. **Build** — Suggest tokens from the brief and accepted evidence.
 18. **Build** — Diff generated proposals against accepted owner edits.
@@ -28,12 +28,12 @@ Completed ideas retain their original numbers in `changelog.md`.
 ## Assets & Media
 
 24. **Build** — Background removal/transparency as a lineage-preserving derivative.
-25. **Build** — Validated font upload and safe `@font-face` bible wiring.
+25. **Completed** — Validated font upload and safe `@font-face` bible wiring (see `changelog.md`).
 26. **Build** — Detect low-resolution, malformed, or oversized images.
 27. **Build** — Extract image palettes as reviewable token proposals.
 28. **Build** — Version assets without overwriting prior generations.
 29. **Build** — Compare generated logos and derivatives side by side.
-30. **Build** — Check logo colors against intended brand backgrounds.
+30. **Completed** — Check logo colors against intended brand backgrounds (see `changelog.md`).
 
 ## The Brand Bible (output)
 
@@ -73,14 +73,15 @@ Completed ideas retain their original numbers in `changelog.md`.
 
 ## Compliance & Quality
 
-61. **Build** — Check copy against the selected brand's exact rules and revision.
+61. **Completed** — Check copy against the selected brand's exact rules and revision (see `changelog.md`).
 62. **Build** — Check proposed examples against blocking rules for contradictions.
 63. **Build** — Explainable brand health across coverage, consistency, and evidence.
-64. **Build** — Detect duplicate or conflicting tokens across sections.
+64. **Completed** — Detect duplicate or conflicting tokens across sections (see `changelog.md`).
 65. **Build** — Flag rules without useful examples.
-66. **Build** — Audit intended token contrast pairs against WCAG targets.
+66. **Completed** — Audit intended token contrast pairs against WCAG targets (see `changelog.md`).
 67. **Build** — Compare narrative readability with a configured target.
 70. **Adapt** — Run optional local drift checks and surface them in-app, not by email.
+
 
 ## Publishing & Export
 

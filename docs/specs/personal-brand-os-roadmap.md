@@ -73,18 +73,19 @@ means the item does not serve the present single-owner product.
 
 These requirements were not adequately represented by the numbered ideas:
 
-1. Unified raw-idea, named-concept, existing-project, and quick-start entry paths.
-2. Structured discovery brief with evidence capture and research controls.
-3. Persisted rationale, provenance, confidence explanation, and verification state.
-4. Maturity-aware readiness gates for workspaces and assets.
-5. Exact-brand compliance rather than hard-coded generic checks.
-6. Production asset metadata and qualification records.
-7. Purpose-built audience projections containing all relevant canonical content.
-8. Browser workflows for approval, publication, impact, amendments, history, and restore.
-9. Visual teaching boards for color, type, logo, layout, imagery, and channels.
-10. Unified product positioning with no parody-only language or separate kit dead end.
+1. **Unified entry paths** (`Complete`): Raw-idea, named-concept, existing-project, and quick-start entry paths with controlled research metadata.
+2. **Structured discovery brief** (`Complete`): Discovery brief with starter answers, evidence intake, and visible privacy boundaries.
+3. **Persisted rationale & provenance** (`Complete`): Stored generation runs, prompt versions, rationale tracing, decision records, and decision verification API.
+4. **Maturity-aware readiness gates** (`Complete`): Core-section enforcement and decision verification gating for approved and production-ready milestones.
+5. **Exact-brand compliance** (`Complete`): Compliance evaluations bound to artifact content hash, rule definitions, and published brand identity.
+6. **Production asset qualification** (`Complete`): Asset registrations, magic-byte font validation, logo derivatives, and WCAG contrast checks.
+7. **Purpose-built audience projections** (`Complete`): Creator, designer, business, and agency views rendering narrative, rules, tokens, examples, and assets in HTML and PDF.
+8. **Browser governance workflows** (`Partial`): APIs for approval, publication, amendments, undo/redo, trash, and backup restore are verified; workshop browser controls remain to be built.
+9. **Visual teaching boards** (`Planned`): Visual cards for color palettes, type scales, logo variants, and layouts.
+10. **Unified product positioning** (`Complete`): Single personal brand OS positioning across web shells, library, and documentation.
 
 ## Completion Rule
 
 An item moves to `changelog.md` only after its acceptance tests pass and its usable
 browser or CLI path is verified. Partial infrastructure does not count as completion.
+

@@ -1,7 +1,9 @@
 # 100 Awesome Brand Demos
 
-Copy-and-paste briefs for demoing, testing, or seeding Brand Maker. Every entry is
-fictional and safe to generate.
+Copy-and-paste briefs for demoing, testing, or seeding Brand Maker. Every entry is a
+fictional concept written for this document. They are inputs, not validated fixtures:
+nothing here has been generated and reviewed, and what a model returns from one is not
+guaranteed to be original, accurate, or usable — review any output before you use it.
 
 ## How to use one
 

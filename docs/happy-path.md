@@ -52,7 +52,7 @@ At the top of the **Brand Workshop** page (`/brand-systems/<brand_id>`):
    - Click **`Use a starter audience`**
    - Click **`Use a starter success measure`**
 3. Fill in any other fields you know (Objective, Audience, Category, Competitors, etc.).
-4. *Tip:* Leave anything unknown blank. Every field auto-saves when you pause typing.
+4. *Tip:* Leave anything unknown blank. Every field auto-saves when you pause typing. If an autosave encounters a validation or revision conflict (409/422), it stops retrying automatically and offers an explicit Retry save button.
 
 ---
 
@@ -63,13 +63,15 @@ Scroll down past the brief to find the **Generate a starting point** card.
 ### Option A: Fill or Refresh Every Unlocked Section
 * Click the **`Generate or refresh complete draft`** button.
 * The AI generation engine will process each section in dependency order (Core Identity → Strategy → Colors → Typography → Voice & Tone → etc.), using your founding brief and any existing filled sections as ground truth context.
-* You can watch the progress log in real time below the buttons.
+* You can watch the progress log in real time below the buttons via SSE streaming.
+* **In-flight controls:** You can **Pause**, **Resume**, or **Cancel** generation at any time. If you reload the page, the workshop automatically reattaches to the active or paused run.
+
 
 ### Option B: Fill One Selected Blank Section
 1. Scroll down to the **Section Editor** at the bottom of the page.
 2. In the left navigation sidebar under *Brand sections*, click the section you want to complete (e.g. `Voice and Tone`).
 3. Scroll back up to *Generate a starting point* and click **`Generate selected section`**.
-4. The AI will synthesize only that specific section based on your brief and any previously completed sections.
+4. The AI synthesizes that section **and any unlocked sections it depends on** — a section is only as good as the strategy under it. Lock or approve the prerequisites you want left alone.
 
 ### Option C: Re-align an Existing Brand to the Brief
 * Edit the founding brief, wait for its save confirmation, then click
@@ -88,7 +90,7 @@ Scroll down to the **Section Editor**:
 1. Use the left sidebar menu to navigate between brand sections.
 2. Expand content groups (**Prose**, **Rules**, **Tokens**, **Examples**, **Patterns**) to add, reorder, or edit fields manually.
 3. Update the **Section status** (`incomplete` → `draft` → `reviewed` → `approved`).
-4. *Note on Locking:* Hand-edited or approved sections act as locked anchor points. When you run AI generation again later, locked sections are preserved and fed into the AI as established context.
+4. *Note on Locking:* Lock a section (or set its status to `approved`) to make it an anchor point. When you run AI generation again later, locked and approved sections are preserved and fed into the AI as established context. Editing a section by hand does **not** protect it on its own — only the lock and the approved status do. If you lock or edit a section while generation is already running, your version wins and the generated one is dropped.
 
 ---
 
