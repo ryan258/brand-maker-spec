@@ -13,7 +13,9 @@ from brand_maker.sqlite import database_connection, initialize_database
 
 class SectionRunState(ContractModel):
     section_id: str
-    status: Literal["pending", "accepted", "preserved_locked", "failed"] = "pending"
+    status: Literal["pending", "accepted", "preserved_locked", "preserved_edited", "failed"] = (
+        "pending"
+    )
     attempts: int = Field(0, ge=0)
     error: str | None = None
 
@@ -86,6 +88,17 @@ class SQLiteGenerationRepository:
                 ),
             )
         return run
+
+    def latest_for_brand(self, brand_id: UUID) -> GenerationRun | None:
+        """The run a reloaded workshop should reattach to instead of starting another."""
+
+        with database_connection(self._path) as connection:
+            row = connection.execute(
+                """SELECT run_json FROM generation_runs WHERE brand_id = ?
+                   ORDER BY updated_at DESC LIMIT 1""",
+                (str(brand_id),),
+            ).fetchone()
+        return GenerationRun.model_validate_json(row[0]) if row else None
 
     def get(self, run_id: UUID) -> GenerationRun | None:
         with database_connection(self._path) as connection:

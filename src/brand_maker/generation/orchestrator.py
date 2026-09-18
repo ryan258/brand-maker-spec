@@ -48,6 +48,10 @@ class GenerationRunNotFound(LookupError):
     pass
 
 
+class SectionChangedDuringGeneration(RuntimeError):
+    """The owner locked or edited the target section while the model was working."""
+
+
 def _record_generated_decision(
     envelope: GeneratedSectionEnvelope,
     *,
@@ -182,14 +186,22 @@ def _founding_brief(draft: WorkingDraft) -> dict[str, object] | None:
     for name in ("objective", "audience", "category", "existing_equity"):
         value = getattr(brief, name)
         if value:
-            summary[name] = value
-    for name in ("differentiators", "constraints", "success_measures"):
-        value = getattr(brief, name)
+            summary[name] = _clip(str(value))
+    for name in (
+        "competitors",
+        "differentiators",
+        "constraints",
+        "stakeholders",
+        "locales",
+        "success_measures",
+        "unresolved_questions",
+    ):
+        value = getattr(brief, name, None)
         if value:
-            summary[name] = list(value)
-    # Only objective/audience/category carry the brief's intent; without them there is
-    # nothing substantive to obey, so skip the field entirely.
-    if not any(k in summary for k in ("objective", "audience", "category")):
+            summary[name] = [_clip(str(item)) for item in list(value)[:_MAX_CONTEXT_ITEMS]]
+    # Any substantive field is an instruction to obey; entry path and stage alone (which
+    # every brief carries) mean there is nothing to say.
+    if len(summary) <= 2:
         return None
     return summary
 
@@ -282,6 +294,14 @@ class GenerationOrchestrator:
         self._notify(saved)
         return saved
 
+    async def _commit_progress(self, run: GenerationRun) -> GenerationRun:
+        """Save worker progress without erasing a pause or cancel issued during the call."""
+
+        persisted = await run_in_threadpool(self._runs.get, run.id)
+        if persisted is not None and persisted.status in {"paused", "cancelled"}:
+            run = run.model_copy(update={"status": persisted.status})
+        return await self._save_and_notify_async(run)
+
     async def _persist_generated_section(
         self,
         *,
@@ -291,6 +311,9 @@ class GenerationOrchestrator:
         decision: DecisionRecord,
     ) -> None:
         current = draft
+        baseline = next((item for item in draft.sections if item.id == generated.id), None)
+        if baseline is None:
+            raise ValueError(f"section {generated.id} disappeared during generation")
         for conflict_attempt in range(3):
             if not any(item.id == generated.id for item in current.sections):
                 raise ValueError(f"section {generated.id} disappeared during generation")
@@ -328,6 +351,18 @@ class GenerationOrchestrator:
                 latest = await run_in_threadpool(self._workspaces.get, current.brand_id)
                 if latest is None:
                     raise GenerationRunNotFound from exc
+                # Retrying preserves unrelated edits, but the target section is what this
+                # generation replaces: if the owner locked or changed it while the model
+                # worked, their version wins and the generated one is dropped.
+                latest_section = next(
+                    (item for item in latest.sections if item.id == generated.id), None
+                )
+                if latest_section is None:
+                    raise ValueError(
+                        f"section {generated.id} disappeared during generation"
+                    ) from exc
+                if latest_section != baseline:
+                    raise SectionChangedDuringGeneration(generated.id) from exc
                 current = latest
 
     def start(
@@ -418,7 +453,9 @@ class GenerationOrchestrator:
                         }
                     )
                     return await self._save_and_notify_async(run)
-                if current_section.locked:
+                # An approved section is an anchor too: the walkthrough promises approval
+                # protects hand-authored content, so generation must not replace it.
+                if current_section.locked or current_section.status == "approved":
                     states = list(run.sections)
                     states[run.cursor] = state.model_copy(
                         update={"status": "preserved_locked", "error": None}
@@ -433,6 +470,7 @@ class GenerationOrchestrator:
                     await self._save_and_notify_async(run)
                     continue
                 accepted = False
+                preserved = False
                 last_error = "Section generation failed validation."
                 selected_model = run.model
                 messages = section_messages(
@@ -474,6 +512,13 @@ class GenerationOrchestrator:
                         )
                         accepted = True
                         break
+                    except SectionChangedDuringGeneration:
+                        _logger.info(
+                            "section %s changed during generation; keeping the owner's version",
+                            state.section_id,
+                        )
+                        preserved = True
+                        break
                     except ModelUnavailable as exc:
                         last_error = "Model provider unavailable."
                         _logger.warning(
@@ -495,6 +540,21 @@ class GenerationOrchestrator:
                         )
                         continue
                 states = list(run.sections)
+                if preserved:
+                    states[run.cursor] = state.model_copy(
+                        update={"status": "preserved_edited", "error": None}
+                    )
+                    run = run.model_copy(
+                        update={
+                            "sections": states,
+                            "cursor": run.cursor + 1,
+                            "updated_at": self._clock(),
+                        }
+                    )
+                    run = await self._commit_progress(run)
+                    if run.status in {"paused", "cancelled"}:
+                        return run
+                    continue
                 if not accepted:
                     states[run.cursor] = state.model_copy(
                         update={"status": "failed", "error": last_error}
@@ -502,7 +562,7 @@ class GenerationOrchestrator:
                     run = run.model_copy(
                         update={"sections": states, "status": "failed", "updated_at": self._clock()}
                     )
-                    return await self._save_and_notify_async(run)
+                    return await self._commit_progress(run)
                 states[run.cursor] = state.model_copy(update={"status": "accepted", "error": None})
                 run = run.model_copy(
                     update={
@@ -511,9 +571,11 @@ class GenerationOrchestrator:
                         "updated_at": self._clock(),
                     }
                 )
-                await self._save_and_notify_async(run)
+                run = await self._commit_progress(run)
+                if run.status in {"paused", "cancelled"}:
+                    return run
             run = run.model_copy(update={"status": "completed", "updated_at": self._clock()})
-            return await self._save_and_notify_async(run)
+            return await self._commit_progress(run)
         except Exception as exc:
             _logger.exception("unhandled error during generation run %s", run_id)
             states = list(run.sections)

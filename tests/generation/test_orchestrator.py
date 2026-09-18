@@ -347,10 +347,19 @@ def test_founding_brief_summarizes_set_fields_with_concept_and_stage() -> None:
     assert summary["differentiators"] == ["local-first"]
 
 
-def test_founding_brief_is_skipped_without_substantive_intent() -> None:
-    # A brief with only constraints and no objective/audience/category is nothing to obey.
+def test_founding_brief_keeps_constraints_without_objective_audience_or_category() -> None:
+    # Constraints are instructions to obey on their own; dropping them loses the brief.
     draft = _draft_with_brief(WorkspaceBrief(constraints=["budget under 5k"]))
-    assert _founding_brief(draft) is None
+
+    summary = _founding_brief(draft)
+
+    assert summary is not None
+    assert summary["constraints"] == ["budget under 5k"]
+
+
+def test_founding_brief_is_skipped_when_nothing_substantive_is_set() -> None:
+    # Entry path and stage alone are on every brief, so there is nothing to obey.
+    assert _founding_brief(_draft_with_brief(WorkspaceBrief())) is None
 
 
 def test_build_accepted_context_hydrates_section_blocks_tokens_rules_and_examples() -> None:

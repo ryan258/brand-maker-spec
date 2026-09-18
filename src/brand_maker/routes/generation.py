@@ -61,6 +61,19 @@ async def start_generation_run(
 
 
 @router.get(
+    "/api/brand-systems/{brand_id}/generation-runs/latest",
+    response_model=GenerationRun,
+    tags=["living brand generation"],
+)
+async def get_latest_generation_run(brand_id: UUID, request: Request) -> GenerationRun:
+    runs = cast(SQLiteGenerationRepository, request.app.state.generation_repository)
+    run = await run_in_threadpool(runs.latest_for_brand, brand_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="No generation run for this brand system.")
+    return run
+
+
+@router.get(
     "/api/generation-runs/{run_id}",
     response_model=GenerationRun,
     tags=["living brand generation"],
