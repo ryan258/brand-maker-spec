@@ -184,15 +184,33 @@ async def create_artifact_evaluation(
     payload: EvaluateArtifactRequest, request: Request
 ) -> ArtifactEvaluation:
     store = cast(SQLiteComplianceRepository, request.app.state.compliance_repository)
+    rules = list(payload.rules)
+    source_content_hash = None
+    if payload.brand_id is not None:
+        # Named brand: resolve the canonical publication so the result is bound to real
+        # published state and enforces that publication's own rules, not just supplied ones.
+        publications = cast(SQLitePublicationRepository, request.app.state.publication_repository)
+        published = await run_in_threadpool(
+            publications.get, payload.brand_id, payload.brand_version
+        )
+        if published is None:
+            raise HTTPException(status_code=404, detail="Published version not found.")
+        source_content_hash = published.content_hash
+        known = {rule.id for rule in rules}
+        rules.extend(
+            rule for rule in deterministic_copy_rules(published.snapshot) if rule.id not in known
+        )
     await run_in_threadpool(store.register_artifact, payload.artifact)
     evaluation = await run_in_threadpool(
         partial(
             evaluate_artifact,
             payload.artifact,
-            rules=payload.rules,
+            rules=rules,
             brand_version=payload.brand_version,
             amendment_revision=payload.amendment_revision,
             tool_version=request.app.version,
+            brand_id=payload.brand_id,
+            source_content_hash=source_content_hash,
         )
     )
     return await run_in_threadpool(store.save_evaluation, evaluation)

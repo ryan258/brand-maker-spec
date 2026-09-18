@@ -2,6 +2,7 @@
 
 import re
 from typing import Literal
+from uuid import UUID
 
 from brand_maker.brand_system.models import BrandSection
 from brand_maker.compliance.models import (
@@ -11,6 +12,7 @@ from brand_maker.compliance.models import (
     DeterministicRule,
     TokenCollisionFinding,
     TokenContrastFinding,
+    rule_set_hash,
 )
 
 
@@ -103,6 +105,8 @@ def evaluate_artifact(
     brand_version: str,
     amendment_revision: int,
     tool_version: str,
+    brand_id: UUID | None = None,
+    source_content_hash: str | None = None,
 ) -> ArtifactEvaluation:
     return ArtifactEvaluation(
         artifact_hash=artifact.content_hash,
@@ -111,6 +115,9 @@ def evaluate_artifact(
         tool_version=tool_version,
         rule_ids=[rule.id for rule in rules],
         findings=[_finding(rule, artifact) for rule in rules],
+        rule_set_hash=rule_set_hash(rules),
+        brand_id=brand_id,
+        source_content_hash=source_content_hash,
     )
 
 

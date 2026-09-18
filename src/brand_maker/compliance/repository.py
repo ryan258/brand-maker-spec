@@ -19,11 +19,13 @@ CREATE TABLE IF NOT EXISTS compliance_artifacts (
 CREATE TABLE IF NOT EXISTS compliance_campaigns (
  id TEXT PRIMARY KEY, status TEXT NOT NULL, result_json TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS compliance_evaluations (
+CREATE TABLE IF NOT EXISTS compliance_evaluations_v2 (
  artifact_hash TEXT NOT NULL, brand_version TEXT NOT NULL,
  amendment_revision INTEGER NOT NULL, tool_version TEXT NOT NULL,
+ rule_set_hash TEXT NOT NULL, brand_id TEXT NOT NULL, source_content_hash TEXT NOT NULL,
  evaluation_json TEXT NOT NULL,
- PRIMARY KEY(artifact_hash, brand_version, amendment_revision, tool_version)
+ PRIMARY KEY(artifact_hash, brand_version, amendment_revision, tool_version,
+             rule_set_hash, brand_id, source_content_hash)
 )
 """
 
@@ -101,27 +103,28 @@ class SQLiteComplianceRepository:
         return str(row[0]) if row else None
 
     def save_evaluation(self, evaluation: ArtifactEvaluation) -> ArtifactEvaluation:
+        # Every input that can change a finding is part of the key, so a stored result is
+        # only ever returned for the exact artifact, brand state, and rules that produced it.
+        key = (
+            evaluation.artifact_hash,
+            evaluation.brand_version,
+            evaluation.amendment_revision,
+            evaluation.tool_version,
+            evaluation.rule_set_hash,
+            str(evaluation.brand_id or ""),
+            evaluation.source_content_hash or "",
+        )
         with self._connect() as connection:
             connection.execute(
-                """INSERT OR IGNORE INTO compliance_evaluations
-                   VALUES (?, ?, ?, ?, ?)""",
-                (
-                    evaluation.artifact_hash,
-                    evaluation.brand_version,
-                    evaluation.amendment_revision,
-                    evaluation.tool_version,
-                    evaluation.model_dump_json(),
-                ),
+                """INSERT OR IGNORE INTO compliance_evaluations_v2
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (*key, evaluation.model_dump_json()),
             )
             row = connection.execute(
-                """SELECT evaluation_json FROM compliance_evaluations
-                   WHERE artifact_hash=? AND brand_version=?
-                   AND amendment_revision=? AND tool_version=?""",
-                (
-                    evaluation.artifact_hash,
-                    evaluation.brand_version,
-                    evaluation.amendment_revision,
-                    evaluation.tool_version,
-                ),
+                """SELECT evaluation_json FROM compliance_evaluations_v2
+                   WHERE artifact_hash=? AND brand_version=? AND amendment_revision=?
+                   AND tool_version=? AND rule_set_hash=? AND brand_id=?
+                   AND source_content_hash=?""",
+                key,
             ).fetchone()
         return ArtifactEvaluation.model_validate_json(row[0])
