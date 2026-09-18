@@ -16,6 +16,7 @@ from brand_maker.brand_system.models import (
     LocalOwner,
     NarrativeBlock,
     UpdateBriefRequest,
+    VerifyDecisionRequest,
     WorkingDraft,
     WorkspaceBrief,
 )
@@ -38,6 +39,10 @@ class WorkspaceNotFound(LookupError):
 
 class SectionNotFound(LookupError):
     """The requested canonical section does not exist."""
+
+
+class DecisionNotFound(LookupError):
+    """The requested decision record does not exist."""
 
 
 class LockedSection(RuntimeError):
@@ -217,6 +222,37 @@ class BrandSystemService:
             expected_revision=current.revision,
             action="evidence.added",
             reason=f"Add {source.kind} evidence: {source.title}",
+        )
+
+    def verify_decision(self, brand_id: UUID, request: VerifyDecisionRequest) -> WorkingDraft:
+        """Record the owner's verification so readiness gates can be satisfied honestly."""
+
+        current = self._workspaces.get(brand_id)
+        if current is None:
+            raise WorkspaceNotFound
+        if current.revision != request.expected_revision:
+            raise StaleDraftRevision("draft revision conflict")
+        if not any(item.id == request.decision_id for item in current.decisions):
+            raise DecisionNotFound
+        decisions = [
+            item.model_copy(update={"verification_status": request.verification_status})
+            if item.id == request.decision_id
+            else item
+            for item in current.decisions
+        ]
+        payload = current.model_dump(mode="json")
+        payload.update(
+            {
+                "decisions": [item.model_dump(mode="json") for item in decisions],
+                "revision": current.revision + 1,
+            }
+        )
+        updated = WorkingDraft.model_validate(payload)
+        return self._workspaces.update(
+            updated,
+            expected_revision=current.revision,
+            action="decision.verified",
+            reason=request.note or f"{request.decision_id} marked {request.verification_status}.",
         )
 
     def replace_section(

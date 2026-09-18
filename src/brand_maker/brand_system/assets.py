@@ -192,7 +192,14 @@ class AssetStore:
     def prepare_publication(self, draft: WorkingDraft) -> WorkingDraft:
         assets: list[AssetRegistration] = []
         for asset in draft.assets:
-            if asset.storage == "managed" or not asset.required:
+            if asset.storage == "managed":
+                # A managed blob can still be gone or altered on disk, and publication
+                # promises that every required file was present and unchanged at this moment.
+                if asset.required:
+                    self.read(asset)
+                assets.append(asset)
+                continue
+            if not asset.required:
                 assets.append(asset)
                 continue
             if asset.source_path is None:

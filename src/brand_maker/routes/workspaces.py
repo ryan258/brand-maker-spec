@@ -27,6 +27,7 @@ from brand_maker.brand_system.models import (
     EditImpact,
     UpdateBriefRequest,
     UpdateSectionRequest,
+    VerifyDecisionRequest,
     WorkingDraft,
     WorkspacePage,
 )
@@ -47,6 +48,7 @@ from brand_maker.brand_system.repository import (
 )
 from brand_maker.brand_system.service import (
     BrandSystemService,
+    DecisionNotFound,
     InvalidSectionEdit,
     LockedSection,
     SectionNotFound,
@@ -187,6 +189,25 @@ async def add_brand_evidence(
         return await run_in_threadpool(service.add_evidence, brand_id, payload)
     except StaleDraftRevision:
         raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+    except WorkspaceNotFound:
+        raise HTTPException(status_code=404, detail="Brand system not found.") from None
+
+
+@router.post(
+    "/api/brand-systems/{brand_id}/decision-verifications",
+    response_model=WorkingDraft,
+    tags=["living brand systems"],
+)
+async def verify_brand_decision(
+    brand_id: UUID, payload: VerifyDecisionRequest, request: Request
+) -> WorkingDraft:
+    service = cast(BrandSystemService, request.app.state.brand_system_service)
+    try:
+        return await run_in_threadpool(service.verify_decision, brand_id, payload)
+    except StaleDraftRevision:
+        raise HTTPException(status_code=409, detail="Draft revision conflict.") from None
+    except DecisionNotFound:
+        raise HTTPException(status_code=404, detail="Decision not found.") from None
     except WorkspaceNotFound:
         raise HTTPException(status_code=404, detail="Brand system not found.") from None
 

@@ -227,15 +227,22 @@ async def export_published_brand_system(
         )
     if format_name == "pdf":
         view = project(rendered, content_hash=published.content_hash, audience=audience)
-        return Response(render_pdf(view), media_type="application/pdf")
-    with tempfile.NamedTemporaryFile(suffix=".zip") as temporary:
-        create_archive(
-            published,
-            Path(request.app.state.settings.database_path).parent / "assets",
-            Path(temporary.name),
-            rendered=rendered,
-        )
-        archive_body = Path(temporary.name).read_bytes()
+        # Rendering and zipping are CPU- and IO-bound; on the event loop a large export
+        # stalls every other request, status polling and generation controls included.
+        pdf_body = await run_in_threadpool(lambda: render_pdf(view))
+        return Response(pdf_body, media_type="application/pdf")
+
+    def build_archive() -> bytes:
+        with tempfile.NamedTemporaryFile(suffix=".zip") as temporary:
+            create_archive(
+                published,
+                Path(request.app.state.settings.database_path).parent / "assets",
+                Path(temporary.name),
+                rendered=rendered,
+            )
+            return Path(temporary.name).read_bytes()
+
+    archive_body = await run_in_threadpool(build_archive)
     return Response(archive_body, media_type="application/zip")
 
 

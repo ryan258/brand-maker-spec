@@ -19,6 +19,7 @@ StableId = Annotated[
     Field(min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"),
 ]
 ShortText = Annotated[str, Field(min_length=1, max_length=300)]
+TokenValueText = Annotated[str, Field(min_length=1, max_length=2_000)]
 NarrativeText = Annotated[str, Field(min_length=1, max_length=50_000)]
 
 ReferenceKind = Literal["section", "block", "rule", "token", "asset", "example", "pattern"]
@@ -107,7 +108,7 @@ class BrandToken(ContractModel):
     id: StableId
     name: ShortText
     value_type: Literal["color", "string", "number", "dimension", "duration", "font", "boolean"]
-    value: str | float | int | bool
+    value: TokenValueText | float | int | bool
     references: list[CanonicalReference] = Field(default_factory=list, max_length=100)
     decision_ids: list[StableId] = Field(default_factory=list, max_length=100)
 
@@ -485,6 +486,13 @@ class UpdateSectionRequest(ContractModel):
 class UpdateBriefRequest(ContractModel):
     expected_revision: int = Field(..., ge=1)
     brief: WorkspaceBrief
+
+
+class VerifyDecisionRequest(ContractModel):
+    expected_revision: int = Field(..., ge=1)
+    decision_id: StableId
+    verification_status: Literal["verified", "waived"]
+    note: ShortText | None = None
 
 
 class CreateEvidenceRequest(ContractModel):

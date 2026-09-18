@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS published_brand_versions (
 """
 
 
+def canonical_content_hash(draft: WorkingDraft) -> str:
+    """The one definition of a publication's content hash, shared by publish and import."""
+
+    canonical = json.dumps(draft.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 class PublicationConflict(RuntimeError):
     """Base class for safe publication-state conflicts."""
 
@@ -158,10 +165,7 @@ class SQLitePublicationRepository:
                 raise DraftNotApproved
             if not assess_readiness(draft, "approved").can_advance:
                 raise DraftNotReady
-            canonical = json.dumps(
-                draft.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-            )
-            content_hash = hashlib.sha256(canonical.encode()).hexdigest()
+            content_hash = canonical_content_hash(draft)
             approvals = [self._approval(item) for item in approval_rows]
             manifest = PublicationManifest(
                 schema_version=draft.schema_version,

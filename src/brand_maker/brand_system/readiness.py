@@ -10,6 +10,23 @@ from brand_maker.models import ContractModel
 ReadinessTarget = Literal["concept", "working", "approved", "production-ready"]
 FindingSeverity = Literal["warning", "blocking"]
 
+# A schema-valid workspace can hold any set of sections, so the sections an approved brand
+# must actually contain are named here rather than assumed from how creation happens to work.
+CORE_SECTION_IDS = (
+    "section.strategy",
+    "section.messaging",
+    "section.voice",
+    "section.color",
+    "section.typography",
+)
+PRODUCTION_SECTION_IDS = (
+    *CORE_SECTION_IDS,
+    "section.logo",
+    "section.layout",
+    "section.accessibility",
+    "section.governance",
+)
+
 
 class ReadinessFinding(ContractModel):
     code: StableId
@@ -44,6 +61,37 @@ def assess_readiness(draft: WorkingDraft, target: ReadinessTarget) -> ReadinessR
         )
 
     if target in {"approved", "production-ready"}:
+        required_ids = PRODUCTION_SECTION_IDS if target == "production-ready" else CORE_SECTION_IDS
+        present = {section.id for section in draft.sections}
+        for section_id in required_ids:
+            if section_id not in present:
+                findings.append(
+                    ReadinessFinding(
+                        code="section.missing",
+                        severity="blocking",
+                        target_id=section_id,
+                        message=f"{section_id.removeprefix('section.')} is missing from this "
+                        "brand system and is required before this maturity.",
+                    )
+                )
+        for decision in draft.decisions:
+            if decision.verification_requirement == "none":
+                continue
+            if decision.verification_status != "unverified":
+                continue
+            findings.append(
+                ReadinessFinding(
+                    code="decision.unverified",
+                    # Approval records that the owner accepted the content; production use
+                    # is where an unverified professional or legal claim becomes a risk.
+                    severity="blocking" if target == "production-ready" else "warning",
+                    target_id=decision.id,
+                    message=(
+                        f"{decision.decision_type} still needs "
+                        f"{decision.verification_requirement.replace('-', ' ')}."
+                    ),
+                )
+            )
         for section in draft.sections:
             if section.status not in {"reviewed", "approved"}:
                 findings.append(
