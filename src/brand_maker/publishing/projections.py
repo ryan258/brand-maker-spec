@@ -4,7 +4,11 @@ from typing import Literal
 
 from pydantic import Field
 
-from brand_maker.brand_system.models import BrandSection, RenderedPublishedVersion
+from brand_maker.brand_system.models import (
+    AssetRegistration,
+    BrandSection,
+    RenderedPublishedVersion,
+)
 from brand_maker.models import ContractModel
 
 Audience = Literal["creator", "designer", "business", "agency"]
@@ -24,9 +28,8 @@ AUDIENCE_SECTIONS: dict[Audience, frozenset[str]] = {
             "section.accessibility",
         }
     ),
-    "business": frozenset(
-        {"section.strategy", "section.audience", "section.messaging", "section.governance"}
-    ),
+    # Audience material lives in strategy patterns; there is no section.audience.
+    "business": frozenset({"section.strategy", "section.messaging", "section.governance"}),
     "agency": frozenset(),
 }
 
@@ -39,6 +42,7 @@ class AudienceProjection(ContractModel):
     audience: Audience
     source_content_hash: str
     sections: list[BrandSection]
+    assets: list[AssetRegistration] = Field(default_factory=list)
 
 
 def project(
@@ -58,4 +62,5 @@ def project(
         audience=audience,
         source_content_hash=content_hash,
         sections=sections,
+        assets=list(rendered.rendered_snapshot.assets),
     )

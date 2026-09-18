@@ -320,9 +320,10 @@ def test_comment_injection_and_token_mappings() -> None:
 
     # Token ID distinction and type mappings
     assert "--brand-token-foo_bar: 16px;" in exports["tokens.css"]
-    assert "--brand-token-foo-bar: 200ms;" in exports["tokens.css"]
+    # A literal dash is doubled so token.foo-bar cannot collide with token.foo.bar.
+    assert "--brand-token-foo--bar: 200ms;" in exports["tokens.css"]
     assert '"token-foo_bar": "16px"' in exports["tailwind.config.js"]
-    assert '"token-foo-bar": "200ms"' in exports["tailwind.config.js"]
+    assert '"token-foo--bar": "200ms"' in exports["tailwind.config.js"]
     # Boolean boolean flag token is in CSS/JSON but NOT in Tailwind spacing
     assert '"flag"' not in exports["tailwind.config.js"]
 

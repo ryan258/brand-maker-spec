@@ -13,6 +13,7 @@ from brand_maker.brand_system.models import (
     RenderedPublishedVersion,
     WorkingDraft,
 )
+from brand_maker.brand_system.publication import canonical_content_hash
 
 
 def published_version() -> PublishedVersion:
@@ -67,7 +68,7 @@ def published_version() -> PublishedVersion:
         publisher_id="local-owner",
         draft_revision=4,
         change_summary="Initial guide.",
-        content_hash="a" * 64,
+        content_hash=canonical_content_hash(draft),
         manifest=PublicationManifest(
             schema_version="1.0", draft_revision=4, section_ids=["section.strategy", "section.logo"]
         ),

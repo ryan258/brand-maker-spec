@@ -9,22 +9,30 @@ from pathlib import Path
 
 from brand_maker.publishing.patterns import render_pattern_html
 from brand_maker.publishing.projections import AudienceProjection
+from brand_maker.publishing.web import section_detail_html
+
+
+def _asset_html(view: AudienceProjection) -> str:
+    if not view.assets:
+        return ""
+    items = "".join(
+        f"<li><strong>{escape(asset.name)}</strong> ({escape(asset.media_type)}, "
+        f"{asset.size_bytes} bytes, {'required' if asset.required else 'optional'})</li>"
+        for asset in view.assets
+    )
+    return f'<section id="assets"><h2>Production assets</h2><ul>{items}</ul></section>'
 
 
 def projection_html(view: AudienceProjection) -> str:
     sections: list[str] = []
     for section in view.sections:
         blocks = "".join(f"<p>{escape(block.text)}</p>" for block in section.blocks)
-        rules = "".join(
-            f"<li><strong>{escape(rule.name)}:</strong> {escape(rule.description)}</li>"
-            for rule in section.rules
-        )
-        rule_list = f"<h3>Rules</h3><ul>{rules}</ul>" if rules else ""
+        detail = "".join(section_detail_html(section))
         patterns = "".join(render_pattern_html(pattern) for pattern in section.patterns)
         pattern_list = f"<h3>Patterns and playbooks</h3>{patterns}" if patterns else ""
         sections.append(
             f'<section id="{escape(section.id)}"><h2>{escape(section.title)}</h2>'
-            f"{blocks}{rule_list}{pattern_list}</section>"
+            f"{blocks}{detail}{pattern_list}</section>"
         )
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{escape(view.brand_name)} brand guide</title><meta name="author" content="Brand System Maker"><style>
 @page {{ size: letter; margin: 0.7in 0.7in 0.75in; @bottom-right {{ content: "Page " counter(page) " of " counter(pages); color: #44546a; font-size: 9pt; }} }}
@@ -33,7 +41,7 @@ body {{ margin: 0; }} header {{ border-bottom: 3px solid #3157d5; margin-bottom:
 h1 {{ color: #172033; font-size: 28pt; margin: 0 0 8pt; }} h2 {{ color: #2448b8; font-size: 18pt; margin: 22pt 0 8pt; break-after: avoid; }}
 h3 {{ font-size: 12pt; break-after: avoid; }} p, li {{ orphans: 3; widows: 3; }} section {{ break-inside: auto; }}
 .source {{ color: #44546a; }} strong {{ color: #172033; }}
-</style></head><body><main><header><h1>{escape(view.brand_name)}</h1><p>{escape(view.audience.title())} brand guide</p><p class="source">Version {escape(view.version)} - amendment {view.amendment_revision}<br>Content hash {escape(view.source_content_hash)}</p></header>{"".join(sections)}</main></body></html>"""
+</style></head><body><main><header><h1>{escape(view.brand_name)}</h1><p>{escape(view.audience.title())} brand guide</p><p class="source">Version {escape(view.version)} - amendment {view.amendment_revision}<br>Content hash {escape(view.source_content_hash)}</p></header>{"".join(sections)}{_asset_html(view)}</main></body></html>"""
 
 
 def render_html_pdf(html_content: str) -> bytes:

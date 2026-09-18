@@ -5,14 +5,24 @@ import json
 import mimetypes
 import re
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from brand_maker.brand_bible import render_brand_bible
 from brand_maker.brand_system.assets import AssetChanged, AssetMissing, AssetStore
-from brand_maker.brand_system.models import AssetRegistration, PublishedVersion, WorkingDraft
+from brand_maker.brand_system.models import (
+    AssetRegistration,
+    BrandToken,
+    PublishedVersion,
+    WorkingDraft,
+)
 from brand_maker.publishing.archive import MAX_ARCHIVE_BYTES, MAX_ENTRIES, MAX_ENTRY_BYTES
 from brand_maker.publishing.markdown import export_markdown
 from brand_maker.publishing.pdf import render_html_pdf
+
+
+class ExportNameCollision(ValueError):
+    """Two token ids would export as the same identifier."""
 
 
 class BrandKitLimitExceeded(ValueError):
@@ -28,9 +38,25 @@ class RequiredBrandKitAssetUnavailable(ValueError):
 
 
 def _semantic_name(value: str) -> str:
-    cleaned = value.casefold().replace(".", "-")
+    """Map one token id to a CSS name that no other valid token id can produce."""
+
+    # `.` becomes `-`, so an existing `-` is doubled first to keep the mapping reversible:
+    # otherwise token.a.b and token.a-b would export as the same custom property.
+    cleaned = value.casefold().replace("-", "--").replace(".", "-")
     cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned).strip("-")
     return cleaned or "token"
+
+
+def _token_css_names(tokens: Sequence[BrandToken]) -> dict[str, str]:
+    """One naming policy for every export: stable per token id, unique per export."""
+
+    claimed: dict[str, str] = {}
+    for token in tokens:
+        name = _semantic_name(token.id)
+        owner = claimed.setdefault(name, token.id)
+        if owner != token.id:
+            raise ExportNameCollision(f"{owner} and {token.id} both export as --brand-{name}")
+    return {token.id: _semantic_name(token.id) for token in tokens}
 
 
 def _css_value(value: str | float | int | bool) -> str:
@@ -48,25 +74,20 @@ def _css_value(value: str | float | int | bool) -> str:
 
 def export_draft_tokens(draft: WorkingDraft) -> dict[str, str]:
     safe_css_brand = re.sub(r"[\r\n]+", " ", draft.brand_name).replace("*/", "* /")
-    safe_js_brand = re.sub(r"[\r\n]+", " ", draft.brand_name)
+    # A JSON string literal escapes every line terminator, U+2028/U+2029 included, so the
+    # name cannot close the comment and start a statement in whatever loads this config.
+    safe_js_brand = json.dumps(draft.brand_name)
 
     tokens = [token for section in draft.sections for token in section.tokens]
+    names = _token_css_names(tokens)
     css = [f"/* brand-system: {safe_css_brand} (draft) */", ":root {"]
     colors: dict[str, str] = {}
     fonts: dict[str, str] = {}
     spacing: dict[str, str] = {}
     durations: dict[str, str] = {}
-    seen_keys: dict[str, int] = {}
 
     for token in sorted(tokens, key=lambda item: item.id):
-        base_key = _semantic_name(token.id)
-        if base_key in seen_keys:
-            seen_keys[base_key] += 1
-            key = f"{base_key}_{seen_keys[base_key]}"
-        else:
-            seen_keys[base_key] = 0
-            key = base_key
-
+        key = names[token.id]
         val = str(token.value)
         css.append(f"  --brand-{key}: {_css_value(token.value)};")
         if token.value_type == "color":
@@ -114,8 +135,9 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
     rules = [rule for section in published.snapshot.sections for rule in section.rules]
     patterns = [pattern for section in published.snapshot.sections for pattern in section.patterns]
     css = [f"/* brand-version: {published.version}; hash: {published.content_hash} */", ":root {"]
+    names = _token_css_names(tokens)
     for token in sorted(tokens, key=lambda item: item.id):
-        css.append(f"  --brand-{_semantic_name(token.id)}: {_css_value(token.value)};")
+        css.append(f"  --brand-{names[token.id]}: {_css_value(token.value)};")
     css.append("}")
     metadata = {"version": published.version, "content_hash": published.content_hash}
     token_payload = {**metadata, "tokens": [item.model_dump(mode="json") for item in tokens]}
@@ -127,7 +149,7 @@ def export_developer_package(published: PublishedVersion) -> dict[str, str]:
     voice_sections = [
         section
         for section in published.snapshot.sections
-        if section.id in {"section.voice", "section.messaging", "section.audience"}
+        if section.id in {"section.voice", "section.messaging", "section.strategy"}
     ]
     voice_payload = {
         **metadata,
@@ -169,6 +191,11 @@ def _asset_zip_filename(asset: AssetRegistration) -> str:
 def build_brand_kit_zip(draft: WorkingDraft, asset_store: AssetStore) -> bytes:
     if len(draft.assets) + 5 > MAX_ENTRIES:
         raise BrandKitLimitExceeded(f"Brand kit contains too many entries (max {MAX_ENTRIES}).")
+    # Estimate before rendering: a PDF render and a full markdown export are the expensive
+    # part, and refusing afterwards spends that work to produce an error.
+    estimate = sum(asset.size_bytes for asset in draft.assets)
+    if estimate > MAX_ARCHIVE_BYTES:
+        raise BrandKitLimitExceeded("Brand kit exceeds the 250 MB archive limit.")
     token_exports = export_draft_tokens(draft)
     md_content = export_markdown(draft, version="draft", amendment_revision=0)
     html_content = render_brand_bible(draft, for_pdf=True)

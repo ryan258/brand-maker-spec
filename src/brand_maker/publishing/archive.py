@@ -11,8 +11,13 @@ from uuid import uuid4
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 from brand_maker.brand_system.amendments import SCHEMA as AMENDMENT_SCHEMA
+from brand_maker.brand_system.amendments import (
+    AmendmentTargetNotClerical,
+    SQLiteAmendmentRepository,
+)
 from brand_maker.brand_system.models import PublishedVersion, RenderedPublishedVersion
 from brand_maker.brand_system.publication import SCHEMA as PUBLICATION_SCHEMA
+from brand_maker.brand_system.publication import canonical_content_hash
 from brand_maker.models import ContractModel
 
 MAX_ARCHIVE_BYTES = 250_000_000
@@ -51,6 +56,12 @@ def create_archive(
     contents = ArchiveContents(published=published, rendered=exact)
     members: dict[str, bytes] = {"archive.json": contents.model_dump_json().encode()}
     for asset in exact.rendered_snapshot.assets:
+        # Only managed blobs live under the asset root; an optional linked asset stays on the
+        # owner's disk and is carried by its registration alone.
+        if asset.storage != "managed":
+            if asset.required:
+                raise InvalidArchive(f"required asset is not managed: {asset.id}")
+            continue
         source = _asset_path(asset_root, asset.content_hash)
         payload = source.read_bytes()
         if (
@@ -111,21 +122,68 @@ def _read_validated(source: Path) -> tuple[ArchiveContents, dict[str, bytes]]:
         raise InvalidArchive("archive metadata is invalid") from exc
     assets: dict[str, bytes] = {}
     for asset in contents.rendered.rendered_snapshot.assets:
+        if asset.storage != "managed":
+            continue
         name = f"assets/{asset.content_hash}"
         asset_payload = members.get(name)
         if asset_payload is None or len(asset_payload) != asset.size_bytes:
             raise InvalidArchive("registered asset is missing or has the wrong size")
-        if hashlib.sha256(asset_payload).hexdigest() != asset.content_hash:
-            raise InvalidArchive("registered asset checksum mismatch")
-        assets[asset.content_hash] = asset_payload
-        del members[name]
-    if members:
+        # Two registrations may share one blob, so validate each blob once and leave the
+        # member in place for the next registration that points at it.
+        if asset.content_hash not in assets:
+            if hashlib.sha256(asset_payload).hexdigest() != asset.content_hash:
+                raise InvalidArchive("registered asset checksum mismatch")
+            assets[asset.content_hash] = asset_payload
+    unregistered = set(members) - {f"assets/{content_hash}" for content_hash in assets}
+    if unregistered:
         raise InvalidArchive("archive contains unregistered members")
+    _validate_publication_claims(contents)
     return contents, assets
+
+
+def _validate_publication_claims(contents: ArchiveContents) -> None:
+    """Member checksums only prove the ZIP is intact; check what the publication claims."""
+
+    published = contents.published
+    rendered = contents.rendered
+    if canonical_content_hash(published.snapshot) != published.content_hash:
+        raise InvalidArchive("published content hash does not match its snapshot")
+    if published.manifest.draft_revision != published.snapshot.revision:
+        raise InvalidArchive("published manifest does not match its snapshot revision")
+    if published.manifest.section_ids != [item.id for item in published.snapshot.sections]:
+        raise InvalidArchive("published manifest does not match its snapshot sections")
+    if any(
+        approval.brand_id != published.brand_id
+        or approval.draft_revision != published.draft_revision
+        for approval in published.approvals
+    ):
+        raise InvalidArchive("approval does not belong to this published version")
+    if rendered.brand_id != published.brand_id or rendered.version != published.version:
+        raise InvalidArchive("rendered publication does not match its published version")
+    if rendered.amendment_revision != len(rendered.amendments):
+        raise InvalidArchive("rendered amendment revision does not match its amendments")
+    if any(
+        amendment.brand_id != published.brand_id
+        or amendment.version != published.version
+        or amendment.amendment_revision != index
+        for index, amendment in enumerate(rendered.amendments, start=1)
+    ):
+        raise InvalidArchive("amendment does not belong to this published version")
+    try:
+        snapshot, summary = SQLiteAmendmentRepository._render(published, list(rendered.amendments))
+    except (AmendmentTargetNotClerical, ValueError) as exc:
+        raise InvalidArchive("archived amendments cannot be reapplied") from exc
+    if snapshot != rendered.rendered_snapshot or summary != rendered.rendered_change_summary:
+        raise InvalidArchive("rendered snapshot does not match its amendments")
 
 
 def restore_archive(source: Path, asset_root: Path) -> ArchiveContents:
     contents, assets = _read_validated(source)
+    _install_assets(asset_root, assets)
+    return contents
+
+
+def _install_assets(asset_root: Path, assets: dict[str, bytes]) -> None:
     asset_root.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix="brand-restore-", dir=asset_root.parent))
     backup = asset_root.parent / f".brand-assets-backup-{uuid4()}"
@@ -147,11 +205,10 @@ def restore_archive(source: Path, asset_root: Path) -> ArchiveContents:
         shutil.rmtree(backup, ignore_errors=True)
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
-    return contents
 
 
 def import_archive(source: Path, *, asset_root: Path, database_path: Path) -> ArchiveContents:
-    contents = restore_archive(source, asset_root)
+    contents, assets = _read_validated(source)
     published = contents.published
     with sqlite3.connect(database_path, timeout=5.0) as connection:
         connection.executescript(PUBLICATION_SCHEMA)
@@ -214,4 +271,7 @@ def import_archive(source: Path, *, asset_root: Path, database_path: Path) -> Ar
                 "INSERT INTO publication_amendments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 amendment_values,
             )
+        # Last inside the transaction: a database conflict must not leave a replaced asset
+        # tree behind, and a failed asset swap rolls the inserts back on the way out.
+        _install_assets(asset_root, assets)
     return contents
